@@ -18,6 +18,7 @@ import { OAuthConsentPage } from "@/components/supabase/oauth-consent-page";
 import companies from "../companies";
 import contacts from "../contacts";
 import { Dashboard } from "../dashboard/Dashboard";
+import { CandidateWorkbench } from "../candidates/WorkbenchPage";
 import { MobileDashboard } from "../dashboard/MobileDashboard";
 import deals from "../deals";
 import { Layout } from "../layout/Layout";
@@ -257,6 +258,7 @@ const DesktopAdmin = (
       </CustomRoutes>
 
       <CustomRoutes>
+        <Route path="/candidates" element={<CandidateWorkbench />} />
         <Route path={ProfilePage.path} element={<ProfilePage />} />
         <Route path={SettingsPage.path} element={<SettingsPage />} />
         <Route path={ImportPage.path} element={<ImportPage />} />

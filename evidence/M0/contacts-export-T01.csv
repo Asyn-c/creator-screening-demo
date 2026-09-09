@@ -1,0 +1,4 @@
+id,first_name,last_name,gender,title,background,avatar,first_seen,last_seen,has_newsletter,status,tags,company_id,sales_id,linkedin_url,email_jsonb,phone_jsonb,company_name,nb_tasks,company,sales,email_work,email_home,email_other,phone_work,phone_home,phone_other
+2,M0-Beta,T01,male,,,,2026-09-09T08:30:47.898+00:00,2026-09-09T08:38:23.109+00:00,false,,,,1,,null,null,,0,,Pending Pending,,,,,,
+1,M0-Alpha,T01,male,,,,2026-09-09T08:28:59.749+00:00,2026-09-09T08:35:55.34+00:00,false,,,,1,,null,null,,1,,Pending Pending,,,,,,
+3,M0-Gamma,T01,male,,,,2026-09-09T08:30:55.714+00:00,2026-09-09T08:30:55.714+00:00,false,,,,1,,null,null,,0,,Pending Pending,,,,,,

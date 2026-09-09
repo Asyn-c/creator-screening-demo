@@ -74,6 +74,33 @@ const ContactIdentityInputs = () => {
       />
       <TextInput source="first_name" validate={required()} helperText={false} />
       <TextInput source="last_name" validate={required()} helperText={false} />
+      <TextInput
+        source="channel_input"
+        label="Channel URL / @handle / ID"
+        helperText={false}
+      />
+      <TextInput
+        source="channel_id"
+        label="Channel ID (UC...)"
+        helperText={false}
+      />
+      <SelectInput
+        source="screening_decision"
+        label="Screening decision"
+        choices={[
+          { id: "unassessed", name: "Unassessed" },
+          { id: "priority_contact", name: "Priority contact" },
+          { id: "needs_info", name: "Needs info" },
+          { id: "paused", name: "Paused" },
+        ]}
+        defaultValue="unassessed"
+        helperText={false}
+      />
+      <TextInput
+        source="screening_reason"
+        label="Screening reason"
+        helperText={false}
+      />
     </div>
   );
 };

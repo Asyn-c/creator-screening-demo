@@ -65,6 +65,11 @@ const Header = () => {
                     isActive={currentPath === "/contacts"}
                   />
                   <NavigationTab
+                    label="初筛工作台"
+                    to="/candidates"
+                    isActive={currentPath === "/candidates"}
+                  />
+                  <NavigationTab
                     label={translate("resources.companies.name", {
                       smart_count: 2,
                     })}

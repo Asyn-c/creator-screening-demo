@@ -100,6 +100,10 @@ export type Contact = {
   phone_jsonb: PhoneNumberAndType[];
   nb_tasks?: number;
   company_name?: string;
+  channel_input?: string | null;
+  channel_id?: string | null;
+  screening_decision?: string | null;
+  screening_reason?: string | null;
 } & Pick<RaRecord, "id">;
 
 export type ContactNote = {

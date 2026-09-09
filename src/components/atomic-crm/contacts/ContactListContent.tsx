@@ -131,6 +131,13 @@ const ContactItemContent = ({
           <div className="font-medium">
             {`${contact.first_name} ${contact.last_name ?? ""}`}
           </div>
+          {(contact.channel_id || contact.screening_decision) && (
+            <div className="text-sm text-muted-foreground">
+              {contact.channel_id ?? "channel_id: 未知"}
+              {" · "}
+              {contact.screening_decision ?? "unassessed"}
+            </div>
+          )}
           {contact.title || contact.company_id != null || contact.nb_tasks ? (
             <div className="text-sm text-muted-foreground">
               {contact.title && contact.company_id != null
