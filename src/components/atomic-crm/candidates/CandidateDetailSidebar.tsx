@@ -34,14 +34,20 @@ import {
   isReviewStale,
   latestAssessment,
   openTask,
+  recordContactEvent,
   remindersEnabled,
   saveAssessment,
   saveDraft,
+  setDoNotContact,
+  unsetDoNotContact,
+  validSentEvents,
   videos,
+  voidContactEvent,
   type AssessmentDraft,
   type CheckKey,
   type CheckValue,
   type Candidate,
+  type ContactEventType,
   type Decision,
   type TaskType,
   type Workspace,
@@ -151,6 +157,8 @@ export function CandidateDetailSidebar({
   const [saving, setSaving] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [logOpen, setLogOpen] = useState<ContactEventType | null>(null);
+  const [dncOpen, setDncOpen] = useState(false);
   const dirty = snapshot(form) !== baseline;
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
@@ -587,9 +595,28 @@ export function CandidateDetailSidebar({
           )}
         </section>
 
-        {/* 联系区（M1 只读时间线 + 提醒；记录/撤销按钮在 M3） */}
+        {/* 联系区：记录/撤销/停止联系（PRD F4） */}
         <section className="space-y-2">
-          <h3 className="font-semibold">联系记录</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">联系记录</h3>
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setLogOpen("sent")}
+              >
+                记录已联系
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setLogOpen("replied")}
+              >
+                记录已回复
+              </Button>
+            </div>
+          </div>
+
           {reminders.length > 0 && (
             <div className="border rounded p-3 text-sm space-y-1 bg-amber-50">
               {reminders.map((r) => (
@@ -600,25 +627,112 @@ export function CandidateDetailSidebar({
               </p>
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-2 text-sm border rounded p-3">
+            <span>
+              {candidate.do_not_contact ? (
+                <>
+                  <Badge variant="destructive">停止联系</Badge>
+                  <span className="text-muted-foreground ml-2">
+                    {candidate.do_not_contact_reason}
+                  </span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  未标记停止联系（有效发信 {validSentEvents(candidate).length}{" "}
+                  次）
+                </span>
+              )}
+            </span>
+            {candidate.do_not_contact ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDncOpen(true)}
+              >
+                解除标记
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDncOpen(true)}
+              >
+                停止联系
+              </Button>
+            )}
+          </div>
+
           {(candidate.contact_events ?? []).filter((e) => e.voided_at === null)
             .length === 0 ? (
-            <p className="text-sm text-muted-foreground">无联系记录</p>
+            <p className="text-sm text-muted-foreground">
+              无联系记录（不推断从未联系过）
+            </p>
           ) : (
             <div className="text-sm space-y-1">
               {(candidate.contact_events ?? [])
                 .filter((e) => e.voided_at === null)
                 .sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
                 .map((e) => (
-                  <div key={e.id}>
-                    {e.type === "sent" ? "发信" : "回复"} ·{" "}
-                    {e.occurred_at.slice(0, 10)}
-                    {e.note ? ` · ${e.note}` : ""}
+                  <div
+                    key={e.id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span>
+                      {e.type === "sent" ? "发信" : "回复"} ·{" "}
+                      {e.occurred_at.slice(0, 10)}
+                      {e.note ? ` · ${e.note}` : ""}
+                    </span>
+                    <button
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={async () => {
+                        try {
+                          await voidContactEvent({
+                            eventId: e.id,
+                            candidateId: candidate.id,
+                            workspaceId: workspace.id,
+                          });
+                          notify("已撤销（统计排除该记录）", {
+                            type: "success",
+                          });
+                          onChanged();
+                        } catch (err: any) {
+                          notify(err.message ?? "撤销失败", { type: "error" });
+                        }
+                      }}
+                    >
+                      撤销
+                    </button>
                   </div>
                 ))}
             </div>
           )}
         </section>
       </div>
+
+      {/* 记录联系事件对话框（sent/replied 补录，未来时间被服务端拒绝） */}
+      <LogContactDialog
+        candidate={candidate}
+        workspace={workspace}
+        type={logOpen}
+        onClose={() => setLogOpen(null)}
+        onDone={() => {
+          setLogOpen(null);
+          onChanged();
+        }}
+      />
+
+      {/* 停止联系 / 解除对话框（原因必填；设置时自动取消联系类任务） */}
+      <DoNotContactDialog
+        candidate={candidate}
+        workspace={workspace}
+        open={dncOpen}
+        onClose={() => setDncOpen(false)}
+        onDone={() => {
+          setDncOpen(false);
+          onChanged();
+        }}
+      />
 
       {/* 完成任务对话框：可选设置新动作与日期 */}
       <CompleteTaskDialog
@@ -773,5 +887,195 @@ function CheckRow({
         ))}
       </div>
     </div>
+  );
+}
+
+/** 记录已联系/已回复：实际发生时间（默认现在，可补录过去；未来时间被服务端拒绝） */
+function LogContactDialog({
+  candidate,
+  workspace,
+  type,
+  onClose,
+  onDone,
+}: {
+  candidate: Candidate;
+  workspace: Workspace;
+  type: ContactEventType | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const notify = useNotify();
+  const [occurredAt, setOccurredAt] = useState(() =>
+    new Date().toISOString().slice(0, 16),
+  );
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  if (!type) return null;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await recordContactEvent({
+        candidateId: candidate.id,
+        workspaceId: workspace.id,
+        type,
+        occurredAt: new Date(occurredAt).toISOString(),
+        note: note || null,
+      });
+      notify(
+        type === "sent"
+          ? "已记录发信（仅统计你确认真实发送的记录）"
+          : "已记录回复（不自动判定合作意愿）",
+        { type: "success" },
+      );
+      setNote("");
+      onDone();
+    } catch (e: any) {
+      notify(e.message ?? "记录失败", { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {type === "sent" ? "记录已联系" : "记录已回复"}
+          </DialogTitle>
+          <DialogDescription>
+            {type === "sent"
+              ? "只有你确认真实发送才记一次；复制内容、导出、创建任务都不算发信。"
+              : "记录实际收到回复的时间与摘要；不自动判定同意合作。"}
+            时间不能晚于现在（可补录过去）。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <label className="text-sm space-y-1 block">
+            <span>实际发生时间</span>
+            <Input
+              type="datetime-local"
+              value={occurredAt}
+              max={new Date().toISOString().slice(0, 16)}
+              onChange={(e) => setOccurredAt(e.target.value)}
+            />
+          </label>
+          <label className="text-sm space-y-1 block">
+            <span>备注（可选）</span>
+            <Input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={
+                type === "sent"
+                  ? "例：首封开发信（Review Invitation）"
+                  : "例：对方回复暂不考虑"
+              }
+            />
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? "记录中…" : "确认记录"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 设置/解除停止联系：原因必填；设置时服务端自动取消联系/跟进类 open 任务 */
+function DoNotContactDialog({
+  candidate,
+  workspace,
+  open,
+  onClose,
+  onDone,
+}: {
+  candidate: Candidate;
+  workspace: Workspace;
+  open: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const notify = useNotify();
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  if (!open) return null;
+  const isSet = !candidate.do_not_contact;
+
+  const save = async () => {
+    if (!reason.trim()) {
+      notify("需要填写原因", { type: "warning" });
+      return;
+    }
+    setSaving(true);
+    try {
+      if (isSet) {
+        await setDoNotContact({
+          candidateId: candidate.id,
+          workspaceId: workspace.id,
+          reason,
+        });
+        notify("已标记停止联系：未完成的联系/跟进任务已取消，历史记录保留", {
+          type: "success",
+        });
+      } else {
+        await unsetDoNotContact({
+          candidateId: candidate.id,
+          workspaceId: workspace.id,
+          reason,
+        });
+        notify("已解除停止联系", { type: "success" });
+      }
+      setReason("");
+      onDone();
+    } catch (e: any) {
+      notify(e.message ?? "操作失败", { type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{isSet ? "设置停止联系" : "解除停止联系"}</DialogTitle>
+          <DialogDescription>
+            {isSet
+              ? "将自动取消未完成的联系/跟进任务（保留补资料/复核任务），默认可行动名单与导出排除该候选；历史联系记录保留，期间仍可补记历史事实。"
+              : "解除后该候选恢复参与可行动名单；解除需再次确认并填写原因。"}
+          </DialogDescription>
+        </DialogHeader>
+        <label className="text-sm space-y-1 block">
+          <span>原因（必填）</span>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={
+              isSet
+                ? "例：过往合作条款分歧，暂停触达"
+                : "例：对方更换商务后恢复联系"
+            }
+          />
+        </label>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            onClick={save}
+            disabled={saving}
+            variant={isSet ? "destructive" : "default"}
+          >
+            {saving ? "处理中…" : isSet ? "确认停止联系" : "确认解除"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

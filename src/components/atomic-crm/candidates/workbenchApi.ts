@@ -318,6 +318,67 @@ export async function completeTask(input: {
   if (error) throw error;
 }
 
+// ---------- 联系事件（sent/replied 补录与撤销）与停止联系 ----------
+
+export type ContactEventType = "sent" | "replied";
+
+export async function recordContactEvent(input: {
+  candidateId: number;
+  workspaceId: number;
+  type: ContactEventType;
+  /** ISO 时间戳；服务端拒绝未来时间 */
+  occurredAt: string;
+  note?: string | null;
+}): Promise<void> {
+  const { error } = await getSupabaseClient().rpc("record_contact_event", {
+    p_candidate_id: input.candidateId,
+    p_workspace_id: input.workspaceId,
+    p_type: input.type,
+    p_occurred_at: input.occurredAt,
+    p_note: input.note ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function voidContactEvent(input: {
+  eventId: number;
+  candidateId: number;
+  workspaceId: number;
+}): Promise<void> {
+  const { error } = await getSupabaseClient().rpc("void_contact_event", {
+    p_event_id: input.eventId,
+    p_candidate_id: input.candidateId,
+    p_workspace_id: input.workspaceId,
+  });
+  if (error) throw error;
+}
+
+export async function setDoNotContact(input: {
+  candidateId: number;
+  workspaceId: number;
+  reason: string;
+}): Promise<void> {
+  const { error } = await getSupabaseClient().rpc("set_do_not_contact", {
+    p_candidate_id: input.candidateId,
+    p_workspace_id: input.workspaceId,
+    p_reason: input.reason,
+  });
+  if (error) throw error;
+}
+
+export async function unsetDoNotContact(input: {
+  candidateId: number;
+  workspaceId: number;
+  reason: string;
+}): Promise<void> {
+  const { error } = await getSupabaseClient().rpc("unset_do_not_contact", {
+    p_candidate_id: input.candidateId,
+    p_workspace_id: input.workspaceId,
+    p_reason: input.reason,
+  });
+  if (error) throw error;
+}
+
 // ---------- 派生工具 ----------
 
 export function latestAssessment(c: Candidate): AssessmentRow | null {

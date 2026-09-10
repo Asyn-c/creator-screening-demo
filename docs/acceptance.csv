@@ -11,8 +11,8 @@ A09,9ce3236,2026-09-10,demo,demo:01受众未知但有场景证据+询问任务,E
 A10,9ce3236,2026-09-10,demo,无正向证据保存待补资料,E2E+RPC冒烟T8,问题与任务完整即可保存,通过:仅要求open_questions+任务,passed,evidence/M1/t14-03;DB冒烟,
 A11,9ce3236,2026-09-10,demo/test,更改任务背景+刷新资料,brief分支:E2E S6 demo:10;资料分支:benchmark实测(获取→保存→再获取→待复核),历史判断保留+待复核+默认导出排除+确认后恢复,brief_version分支全通过;data_version分支:benchmark脚本实测通过(刷新后待复核徽章出现),passed,evidence/M1/t14-06-confirm-review.png;evidence/benchmark/,
 A12,9ce3236,2026-09-10,demo,5次发信/最近<168h,单测(恰好168h不触发/4次不触发/撤销排除/补录重算)+E2E S8,正确提醒+草稿导出不计数,单测边界全过;demo:07间隔/demo:08次数提醒徽章+横幅+开关均通过,passed,workbenchApi.test.ts;evidence/M1/t14-08-reminder-banner.png,
-A13,9ce3236,2026-09-10,unit,撤销误记/补记更早事件,单测 contactReminders,撤销后重算次数及最近时间,数据层重算逻辑单测通过;UI撤销/补录入口未实现(M3),partial,workbenchApi.test.ts,M3-T30 UI
-A14,9ce3236,2026-09-10,demo,暂缓/停止联系,RPC冒烟T4(暂缓取消任务);isActionable单测(DNC排除);demo:09展示,取消对应任务+停止联系排除可行动名单,暂缓取消任务通过;DNC排除名单通过;停止联系设置/解除UI未实现(仅种子数据),partial,STATUS DB冒烟记录;workbenchApi.test.ts,M3-T31 UI
+A13,8390eb9,2026-09-11,demo,撤销误记/补录更早事件,单测contactReminders重算+E2E verify-m3 S1-S3(记录/撤销回到无记录/未来时间拒绝/过去补录),撤销后按有效事件重算+历史排序正确,记录与撤销UI完成;未来时间服务端拒绝;补录过去时间成功,passed,evidence/M3/m3-01-record-void.png;m3-02-future-rejected.png,
+A14,8390eb9,2026-09-11,demo,暂缓/停止联系,RPC冒烟(暂缓取消)+E2E verify-m3 S4-S6(设置DNC取消联系任务/历史保留/解除需原因/DNC期间可补录)+isActionable单测,取消对应任务+停止联系排除默认可行动名单,设置/解除UI完成且联动任务取消;DNC期间补录历史事实通过;列表行徽章显示,passed,evidence/M3/m3-03-dnc-set.png;m3-04-dnc-unset.png;m3-05-dnc-backfill.png,
 A15,9ce3236,2026-09-10,demo,完成今天任务+重启服务,E2E S7;T15 stop/start回归,状态持久化+待办只显示open+分组正确,完成任务后待办移除;stop/start数据指纹一致;18/18+8/8复跑通过,passed,evidence/M1/t14-07-task-completed-todo.png;STATUS T15记录,
 A16,9ce3236,2026-09-10,both,含中文/逗号/引号/换行/公式字符字段,单测 csvCell+buildCandidatesCsv;E2E下载校验,列和数量正确+文本安全+模式标记保留,BOM+17列表头+公式前缀转义+引号换行转义均通过;DEMO文件名+synthetic行通过,passed,workbenchApi.test.ts;evidence/M2/export-sample.csv,
 A17,9ce3236,2026-09-10,both,示例重置后切回真实,E2E S10;T15,真实数据未受影响+示例全程标记,模式隔离通过(真实空间M0记录在/演示0串入);一键重置示例入口未实现(文案已修正为指引SQL),partial,evidence/M1/t14-11-real-isolated.png,M3-T33
