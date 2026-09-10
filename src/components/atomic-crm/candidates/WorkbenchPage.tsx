@@ -1,8 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNotify } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -10,25 +20,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CandidateDetailSidebar } from "./CandidateDetailSidebar";
+import {
+  CandidateDetailSidebar,
+  type SidebarHandle,
+} from "./CandidateDetailSidebar";
 import {
   DECISION_LABELS,
   TASK_TYPE_LABELS,
+  buildTodoItems,
+  contactReminders,
   dataStatus,
+  dateInTz,
   displayName,
   fetchCandidates,
   fetchWorkspaces,
   getMode,
   isReviewStale,
   lastSentAt,
+  latestAssessment,
   openTask,
+  remindersEnabled,
   setMode,
+  setRemindersEnabled,
   updateTaskBackground,
   type Candidate,
   type Decision,
   type Mode,
+  type TaskType,
+  type TodoGroup,
   type Workspace,
 } from "./workbenchApi";
+
+type View = "all" | "todo";
+
+const TODO_GROUP_META: Record<TodoGroup, { title: string; hint: string }> = {
+  overdue: { title: "逾期", hint: "日期早于今天" },
+  today: { title: "今天", hint: "今天未完成不算逾期" },
+  later: { title: "之后", hint: "" },
+};
 
 export const CandidateWorkbench = () => {
   const notify = useNotify();
@@ -38,8 +67,12 @@ export const CandidateWorkbench = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [decisionFilter, setDecisionFilter] = useState<"all" | Decision>("all");
+  const [view, setView] = useState<View>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [remindersOn, setRemindersOn] = useState(remindersEnabled());
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const sidebarRef = useRef<SidebarHandle | null>(null);
 
   const workspace = useMemo(
     () => workspaces.find((w) => w.mode === mode) ?? null,
@@ -66,7 +99,16 @@ export const CandidateWorkbench = () => {
 
   useEffect(() => {
     reload();
-  }, [workspace?.id]);
+  }, [reload]);
+
+  /** 未保存切换守卫（A19）：侧栏有改动时先弹「保存/放弃/继续编辑」 */
+  const guarded = (action: () => void) => {
+    if (sidebarRef.current?.isDirty()) {
+      setPendingAction(() => action);
+    } else {
+      action();
+    }
+  };
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -87,6 +129,19 @@ export const CandidateWorkbench = () => {
 
   const selected = candidates.find((c) => c.id === selectedId) ?? null;
 
+  const runPending = async (saveFirst: boolean) => {
+    if (saveFirst) {
+      try {
+        await sidebarRef.current?.saveDraftNow();
+      } catch {
+        return; // 保存失败：留在当前编辑，不切换
+      }
+    }
+    const action = pendingAction;
+    setPendingAction(null);
+    action?.();
+  };
+
   return (
     <div className="p-2">
       {/* 顶部：任务背景 + 模式 + 动作 */}
@@ -105,15 +160,32 @@ export const CandidateWorkbench = () => {
       </div>
 
       {settingsOpen && workspace && (
-        <TaskBackgroundPanel
-          workspace={workspace}
-          onSaved={(ws) => {
-            setWorkspaces((ws0) => ws0.map((w) => (w.id === ws.id ? ws : w)));
-            setSettingsOpen(false);
-            reload();
-          }}
-          onCancel={() => setSettingsOpen(false)}
-        />
+        <div className="space-y-3 mb-4">
+          <TaskBackgroundPanel
+            workspace={workspace}
+            onSaved={(ws) => {
+              setWorkspaces((ws0) => ws0.map((w) => (w.id === ws.id ? ws : w)));
+              setSettingsOpen(false);
+              reload();
+            }}
+            onCancel={() => setSettingsOpen(false)}
+          />
+          <div className="border rounded-lg p-4 flex items-center gap-2">
+            <Checkbox
+              id="reminders-toggle"
+              checked={remindersOn}
+              onCheckedChange={(v) => {
+                const on = v === true;
+                setRemindersEnabled(on);
+                setRemindersOn(on);
+              }}
+            />
+            <Label htmlFor="reminders-toggle" className="text-sm font-normal">
+              联系提醒（累计发信 5 次或距最近发信不足 168
+              小时时提示；关闭仅影响展示，不改变历史事实）
+            </Label>
+          </div>
+        </div>
       )}
 
       {/* 工具栏 */}
@@ -142,25 +214,47 @@ export const CandidateWorkbench = () => {
         <div className="flex-1" />
         <div className="flex gap-1">
           <Button
+            variant={view === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setView("all")}
+          >
+            全部候选
+          </Button>
+          <Button
+            variant={view === "todo" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setView("todo")}
+          >
+            待办
+          </Button>
+        </div>
+        <div className="flex gap-1">
+          <Button
             variant={mode === "real" ? "default" : "outline"}
             size="sm"
-            onClick={() => switchMode("real")}
+            onClick={() => guarded(() => switchMode("real"))}
           >
             真实空间
           </Button>
           <Button
             variant={mode === "demo" ? "default" : "outline"}
             size="sm"
-            onClick={() => switchMode("demo")}
+            onClick={() => guarded(() => switchMode("demo"))}
           >
             体验示例
           </Button>
         </div>
       </div>
 
-      {/* 候选列表 */}
+      {/* 候选列表 / 待办视图 */}
       {loading ? (
         <p className="text-muted-foreground">加载中…</p>
+      ) : view === "todo" ? (
+        <TodoView
+          candidates={filtered}
+          onOpen={(id) => guarded(() => setSelectedId(id))}
+          activeId={selectedId}
+        />
       ) : filtered.length === 0 ? (
         <div className="border rounded-lg p-8 text-center space-y-3">
           <p className="text-muted-foreground">
@@ -169,7 +263,10 @@ export const CandidateWorkbench = () => {
               : "演示空间为空。点击「重置示例数据」可重新加载 10 位合成候选。"}
           </p>
           {mode === "real" && (
-            <Button variant="outline" onClick={() => switchMode("demo")}>
+            <Button
+              variant="outline"
+              onClick={() => guarded(() => switchMode("demo"))}
+            >
               体验示例
             </Button>
           )}
@@ -181,40 +278,173 @@ export const CandidateWorkbench = () => {
               key={c.id}
               candidate={c}
               workspace={workspace}
-              onOpen={() => setSelectedId(c.id)}
+              remindersOn={remindersOn}
+              onOpen={() => guarded(() => setSelectedId(c.id))}
               active={selectedId === c.id}
             />
           ))}
         </div>
       )}
 
-      {/* 详情侧栏 */}
+      {/* 详情侧栏：key 保证切换候选时重建表单状态（防串数据） */}
       {selected && workspace && (
         <CandidateDetailSidebar
+          key={selected.id}
+          ref={sidebarRef}
           candidate={selected}
           workspace={workspace}
-          onClose={() => setSelectedId(null)}
+          onClose={() => guarded(() => setSelectedId(null))}
           onChanged={reload}
         />
       )}
+
+      {/* 未保存更改对话框（A19：提示保存/放弃，不静默丢弃） */}
+      <Dialog
+        open={pendingAction !== null}
+        onOpenChange={(v) => !v && setPendingAction(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>有未保存的修改</DialogTitle>
+            <DialogDescription>
+              详情侧栏中的编辑内容尚未保存。可先保存为草稿再继续，或放弃这些更改。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPendingAction(null)}>
+              继续编辑
+            </Button>
+            <Button variant="outline" onClick={() => runPending(false)}>
+              放弃更改
+            </Button>
+            <Button onClick={() => runPending(true)}>保存草稿并继续</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
+function TodoView({
+  candidates,
+  onOpen,
+  activeId,
+}: {
+  candidates: Candidate[];
+  onOpen: (id: number) => void;
+  activeId: number | null;
+}) {
+  const { items, counts } = useMemo(
+    () => buildTodoItems(candidates),
+    [candidates],
+  );
+
+  if (items.length === 0) {
+    return (
+      <div className="border rounded-lg p-8 text-center text-muted-foreground">
+        待办为空：没有未完成的下一步任务。
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {(["overdue", "today", "later"] as TodoGroup[]).map((g) => {
+        const groupItems = items.filter((i) => i.group === g);
+        if (groupItems.length === 0) return null;
+        return (
+          <div key={g}>
+            <div className="flex items-baseline gap-2 mb-2">
+              <h2
+                className={`font-semibold ${g === "overdue" ? "text-destructive" : ""}`}
+              >
+                {TODO_GROUP_META[g].title}
+              </h2>
+              <span className="text-sm text-muted-foreground">
+                {counts[g]} 项
+                {TODO_GROUP_META[g].hint && ` · ${TODO_GROUP_META[g].hint}`}
+              </span>
+            </div>
+            <div className="border rounded-lg divide-y">
+              {groupItems.map(({ candidate: c, task }) => {
+                const latest = latestAssessment(c);
+                return (
+                  <button
+                    key={c.id}
+                    className={`w-full text-left px-4 py-3 hover:bg-muted/60 transition ${activeId === c.id ? "bg-muted/40" : ""}`}
+                    onClick={() => onOpen(c.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">
+                          {displayName(c)}
+                          {c.do_not_contact && (
+                            <Badge variant="destructive" className="ml-2">
+                              停止联系
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground truncate">
+                          {TASK_TYPE_LABELS[task.type as TaskType] ?? task.type}
+                          {task.text ? ` · ${task.text}` : ""}
+                        </div>
+                        {latest?.open_questions && (
+                          <div className="text-sm text-muted-foreground truncate">
+                            待确认：{latest.open_questions}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-sm text-right shrink-0">
+                        <Badge
+                          variant={
+                            c.screening_decision === "priority_contact"
+                              ? "default"
+                              : c.screening_decision === "paused"
+                                ? "outline"
+                                : "secondary"
+                          }
+                        >
+                          {DECISION_LABELS[c.screening_decision]}
+                        </Badge>
+                        <div
+                          className={
+                            g === "overdue"
+                              ? "text-destructive mt-1 font-medium"
+                              : "text-muted-foreground mt-1"
+                          }
+                        >
+                          {dateInTz(task.due_date)}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CandidateRow({
   candidate: c,
   workspace,
+  remindersOn,
   onOpen,
   active,
 }: {
   candidate: Candidate;
-  workspace: Workspace;
+  workspace: Workspace | null;
+  remindersOn: boolean;
   onOpen: () => void;
   active: boolean;
 }) {
   const task = openTask(c);
   const lastSent = lastSentAt(c);
-  const stale = isReviewStale(c, workspace);
+  const stale = workspace ? isReviewStale(c, workspace) : false;
+  const reminder = remindersOn && contactReminders(c).length > 0;
 
   return (
     <button
@@ -226,6 +456,14 @@ function CandidateRow({
           <div className="font-medium flex items-center gap-2">
             {displayName(c)}
             {c.do_not_contact && <Badge variant="destructive">停止联系</Badge>}
+            {reminder && (
+              <Badge
+                variant="outline"
+                className="border-amber-500 text-amber-600"
+              >
+                ⏰ 提醒
+              </Badge>
+            )}
           </div>
           <div className="text-sm text-muted-foreground">
             {c.channel_id ?? "频道未知"}
@@ -248,7 +486,7 @@ function CandidateRow({
           {stale && <Badge className="ml-1">待复核</Badge>}
           <div className="text-muted-foreground mt-1">
             {task
-              ? `下一步：${TASK_TYPE_LABELS[task.type as TaskType] ?? task.type} · ${task.due_date.slice(0, 10)}`
+              ? `下一步：${TASK_TYPE_LABELS[task.type as TaskType] ?? task.type} · ${dateInTz(task.due_date)}`
               : "未设置下一步"}
             {lastSent && ` · 最近发信 ${lastSent.slice(0, 10)}`}
           </div>
@@ -289,7 +527,7 @@ function TaskBackgroundPanel({
   };
 
   return (
-    <div className="border rounded-lg p-4 mb-4 space-y-3">
+    <div className="border rounded-lg p-4 space-y-3">
       <p className="font-semibold">
         任务背景（修改会递增版本，旧判断进入待复核）
       </p>

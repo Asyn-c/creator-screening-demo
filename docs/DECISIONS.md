@@ -28,7 +28,19 @@
 
 ### D4: M1 待决事项（进入 M1 前定）
 
-1. workspace 隔离机制：双 sales 身份 vs 新 workspace 表 + RLS 策略（影响全部业务表的查询作用域）
-2. channel_id 唯一约束从全局升级为 workspace 级（部分唯一索引改造）
-3. assessment 版本追加表 + 「单 open 任务」部分唯一索引（M1 数据迁移一并做）
-4. contacts_summary 视图如再加列，记得同步重建（迁移文件内成对出现）
+1. workspace 隔离机制：双 sales 身份 vs 新 workspace 表 + RLS 策略（影响全部业务表的查询作用域）→ 已定：workspace 表 + 应用层作用域（迁移 20260909140000），RLS 加固属 P2
+2. channel_id 唯一约束从全局升级为 workspace 级（部分唯一索引改造）→ 已定：contacts_workspace_channel_uniq
+3. assessment 版本追加表 + 「单 open 任务」部分唯一索引（M1 数据迁移一并做）→ 已定：均落地
+4. contacts_summary 视图如再加列，记得同步重建（迁移文件内成对出现）→ 已执行两次（120001、140200）
+
+## 2026-09-10 · M1 T13/T14 语义决策
+
+### D5: 草稿、版本去重与任务语义
+
+- **草稿持久化在 contacts.assessment_draft（jsonb 单列）**而非独立表：单人本地 Demo 只需「每候选一份编辑中草稿」，提交成功由 save_assessment 清除；不触碰 screening_decision，不进入可行动名单。独立草稿历史表无需求支撑
+- **评估版本去重判定放服务端（RPC 内逐字段 IS NOT DISTINCT FROM）**：前端禁用按钮挡不住并发与重试；「确认仍适用」走 p_force_version=true 显式追加。注意 plpgsql 组合类型 `v_latest IS NOT NULL` 语义是"全字段非空"（evidence 可空导致恒假），存在性判断必须用 `v_latest.id IS NOT NULL`
+- **任务语义修正**（相对 140000 版行为）：未提供新任务时保留原 open 任务（否则「确认仍适用」必然失败或误取消任务）；暂缓才取消 open 任务（PRD F3：暂缓联动）；提供新任务时 type+due 与现有 open 任务相同则不动（避免重复保存 churn 任务历史）
+- **needs_info/priority_contact 的任务校验放宽为「表单新任务 或 已有 open 任务」二选一**：侧栏已有「下一步任务」展示区，用户对已有任务候选无需被迫重复填写
+- **侧栏切换守卫实现**：父级持 SidebarHandle（isDirty/saveDraftNow），CandidateDetailSidebar 加 key={selected.id} 强制按候选重建表单（防串数据）；ref 必须用 useImperativeHandle 托管——直接给 ref.current 赋值在组件卸载后残留，导致守卫读取已卸载组件的脏状态误弹（E2E 发现）
+- **时区**：待办分组按 Asia/Shanghai 自然日（workbenchApi.dateInTz，Intl 实现）；提醒阈值 168h 恰好不触发、第 5 次恰好触发，单测以注入时钟锁定边界
+- **verify-t13-t14.mjs 是可重复执行的验证脚本**（非 e2e/ 下的 test runner 用例，那套 fixtures 会清库不能用于含真实 M0 数据的库）：断言 18 项，含 DB 直查（版本去重计数）；运行前需重置种子并把 demo:10 任务改为昨日以构造逾期

@@ -96,6 +96,11 @@ export const generateContacts = (db: Db, size = 500): Required<Contact>[] => {
       sales_id: company.sales_id!,
       nb_tasks: 0,
       linkedin_url: null,
+      // 频道初筛扩展字段（FakeRest 演示数据不承载真实频道）
+      channel_input: null,
+      channel_id: null,
+      screening_decision: "unassessed",
+      screening_reason: null,
     };
   });
 };
