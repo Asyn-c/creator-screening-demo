@@ -26,6 +26,12 @@
 - `evidence/M0/`（M0 全流程）、`evidence/M1/`（T12 8 张 + t14-01~11）、`evidence/M2/`（m2-01~05 截图 + export-sample.csv + export-demo.csv）
 - 全量检查（最终态）：typecheck ✅ lint ✅ vitest app 175 passed ✅ functions 113 passed ✅
 
+## 验收与提效模拟（2026-09-10 补充）
+
+- **PRD 对照验收**：`docs/acceptance.csv` 逐项记录 A01—A20 —— 11 passed / 7 partial / 1 blocked（A02 真实 Key）/ 1 not_run（A20 删除 UI），每项含证据引用与 issue_id。补测：A01 无 Key 分支（curl 实测 configured:false 提示）、A08 RPC 缺证据拒绝、A11 资料刷新→待复核→默认导出排除（基准测试中真实触发）。修复 A17 文案缺陷（空态提及不存在的重置按钮→改为 SQL 指引）
+- **提效模拟测试**：`docs/BENCHMARK.md` + `docs/benchmark.csv` + `scripts/benchmark-tool.mjs`（可复跑）。10 位基准候选工具路径实测：119 操作 / 机器 27.3s / 必填 7/7 / 零返工；与增强表格任务分解对比：判断录入环节基本打平（工具 ≈97 操作 vs 表格 ≈54 单元格+汇总），节省集中在资料自动获取（每频道约省 1 分钟查抄+切换）与名单汇总；完整闭环估算下降 40—60%（假设透明，AI 模拟性质，不宣称达成 30% 目标）。真人对照材料已备：`demo-data/benchmark-spreadsheet-baseline.csv`（10 位等资料基线）
+- 基准测试数据已从真实空间清理（回到 3 条 M0 记录），证据保留于 `evidence/benchmark/`
+
 ## 未完成 / 阻塞
 
 - 真实 Key 配置后的 A02–A07（10 真实频道、混合输入、部分失败恢复）——需用户在 `supabase/functions/.env` 设置真实 `YOUTUBE_API_KEY`（该文件已 gitignore）

@@ -273,8 +273,8 @@ export const CandidateWorkbench = () => {
         <div className="border rounded-lg p-8 text-center space-y-3">
           <p className="text-muted-foreground">
             {mode === "real"
-              ? "真实空间暂无候选。可以通过 CSV 导入真实候选，或切到示例空间体验完整流程。"
-              : "演示空间为空。点击「重置示例数据」可重新加载 10 位合成候选。"}
+              ? "真实空间暂无候选。可以通过「导入候选」粘贴频道入口，或切到示例空间体验完整流程。"
+              : "演示空间为空。可重跑 demo-data/synthetic-candidates.sql 恢复 10 位合成候选（一键重置入口在 M3 提供）。"}
           </p>
           {mode === "real" && (
             <Button

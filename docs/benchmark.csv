@@ -1,0 +1,4 @@
+run_id,operator,method,batch_id,candidate_count,started_at,setup_seconds,active_seconds,wait_seconds,total_seconds,rework_count,completed_count,eligible_count,required_fields_complete_count,critical_errors,notes,evidence_ref
+BM-001,AI模拟(Playwright脚本非真人),workbench,BM-20260910,10,2026-09-10T15:37:36Z,8.9,18.3,0.6,27.8,0,10,7,7/7,0,机器时间非人工计时;操作动作119;真实Key下等待会增加,evidence/benchmark/
+BM-002,AI模拟(任务分解估算非实测),spreadsheet-equal-data,BM-20260910,10,,600,540,0,1140,N/A,10,7,N/A,N/A,估算值;单元格10s假设;汇总6操作;模板搭建为一次性摊销,demo-data/benchmark-spreadsheet-baseline.csv
+BM-003,AI模拟(任务分解估算非实测),spreadsheet-original,BM-20260910,10,,600,1140,0,1740,N/A,10,7,N/A,N/A,估算值;含每频道60s查抄(区间45-90s)+10次上下文切换;对应实习痛点场景,demo-data/benchmark-spreadsheet-baseline.csv
