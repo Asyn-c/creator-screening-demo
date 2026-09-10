@@ -30,6 +30,7 @@ import {
   completeTask,
   contactReminders,
   dateInTz,
+  fetchChannelData,
   isReviewStale,
   latestAssessment,
   openTask,
@@ -149,9 +150,36 @@ export function CandidateDetailSidebar({
   const [baseline, setBaseline] = useState(() => snapshot(form));
   const [saving, setSaving] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const dirty = snapshot(form) !== baseline;
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
+
+  const refreshData = async () => {
+    setFetching(true);
+    try {
+      const r = await fetchChannelData(candidate.id, workspace.id);
+      if (!r.configured) {
+        notify(r.error ?? "自动资料获取未启用（未配置 Key）", {
+          type: "warning",
+        });
+      } else if (r.error) {
+        notify(`资料获取失败：${r.error}（已有资料保留，显示旧采集时间）`, {
+          type: "error",
+        });
+      } else {
+        notify(
+          r.warning ?? `资料已更新：${r.videos} 条近期视频（旧判断将提示复核）`,
+          { type: "success" },
+        );
+        onChanged();
+      }
+    } catch (e: any) {
+      notify(e.message ?? "资料获取失败", { type: "error" });
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const saveDraftNow = async () => {
     try {
@@ -221,7 +249,7 @@ export function CandidateDetailSidebar({
         evidence: form.evidence || null,
         openQuestions: form.openQuestions || null,
         briefVersion: workspace.brief_version,
-        dataVersion: null,
+        dataVersion: candidate.data_version ?? 0,
         taskType: form.taskType === "" ? null : (form.taskType as TaskType),
         taskDue: form.taskDue || null,
       });
@@ -255,7 +283,8 @@ export function CandidateDetailSidebar({
         evidence: latest.evidence,
         openQuestions: latest.open_questions,
         briefVersion: workspace.brief_version,
-        dataVersion: latest.data_version,
+        // 确认仍适用 = 已按当前任务背景与当前资料版本重新核对
+        dataVersion: candidate.data_version ?? 0,
         taskType: null, // 不动现有 open 任务
         taskDue: null,
         forceVersion: true, // 显式复核：内容不变也记录新版本
@@ -314,7 +343,22 @@ export function CandidateDetailSidebar({
       <div className="p-4 space-y-6">
         {/* 资料区 */}
         <section className="space-y-2">
-          <h3 className="font-semibold">公开资料</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">公开资料</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refreshData}
+              disabled={fetching}
+              title={
+                isDemo
+                  ? "演示数据不请求真实接口"
+                  : "从 YouTube 拉取频道资料与最近视频（需要已配置 API Key）"
+              }
+            >
+              {fetching ? "获取中…" : "更新资料"}
+            </Button>
+          </div>
           {ch ? (
             <div className="text-sm space-y-1">
               <div>

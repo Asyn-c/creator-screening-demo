@@ -24,6 +24,7 @@ import {
   CandidateDetailSidebar,
   type SidebarHandle,
 } from "./CandidateDetailSidebar";
+import { ExportDialog, ImportDialog } from "./ImportExportDialogs";
 import {
   DECISION_LABELS,
   TASK_TYPE_LABELS,
@@ -70,6 +71,8 @@ export const CandidateWorkbench = () => {
   const [view, setView] = useState<View>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [remindersOn, setRemindersOn] = useState(remindersEnabled());
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const sidebarRef = useRef<SidebarHandle | null>(null);
@@ -154,8 +157,19 @@ export const CandidateWorkbench = () => {
         <Button variant="outline" onClick={() => setSettingsOpen((v) => !v)}>
           任务背景设置
         </Button>
-        <Button variant="outline" title="CSV 导入将在 M2 提供" disabled>
-          导入候选（M2）
+        <Button
+          variant="outline"
+          onClick={() => setImportOpen(true)}
+          title="粘贴频道 ID/handle/链接或上传 CSV，本地预检后导入"
+        >
+          导入候选
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setExportOpen(true)}
+          title="导出可行动名单或当前筛选结果"
+        >
+          导出
         </Button>
       </div>
 
@@ -296,6 +310,26 @@ export const CandidateWorkbench = () => {
           onClose={() => guarded(() => setSelectedId(null))}
           onChanged={reload}
         />
+      )}
+
+      {/* 导入 / 导出 */}
+      {workspace && (
+        <>
+          <ImportDialog
+            workspace={workspace}
+            candidates={candidates}
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            onImported={reload}
+          />
+          <ExportDialog
+            workspace={workspace}
+            candidates={candidates}
+            filtered={filtered}
+            open={exportOpen}
+            onOpenChange={setExportOpen}
+          />
+        </>
       )}
 
       {/* 未保存更改对话框（A19：提示保存/放弃，不静默丢弃） */}

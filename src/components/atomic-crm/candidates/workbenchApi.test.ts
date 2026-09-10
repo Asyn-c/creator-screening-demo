@@ -3,9 +3,15 @@ import {
   dateInTz,
   contactReminders,
   buildTodoItems,
+  normalizeChannelInput,
+  parseImportText,
+  buildCandidatesCsv,
+  exportScopeCandidates,
+  isActionable,
   type Candidate,
   type ContactEventRow,
   type TaskRow,
+  type Workspace,
 } from "./workbenchApi";
 
 const baseCandidate = (overrides: Partial<Candidate> = {}): Candidate => ({
@@ -20,10 +26,22 @@ const baseCandidate = (overrides: Partial<Candidate> = {}): Candidate => ({
   do_not_contact_reason: null,
   workspace_id: 1,
   assessment_draft: null,
+  data_version: 0,
   api_cache: [],
   tasks: [],
   assessment: [],
   contact_events: [],
+  ...overrides,
+});
+
+const baseWorkspace = (overrides: Partial<Workspace> = {}): Workspace => ({
+  id: 1,
+  sales_id: 1,
+  mode: "real",
+  product: "激光水平仪",
+  scene: "DIY",
+  market: "美国",
+  brief_version: 1,
   ...overrides,
 });
 
@@ -176,5 +194,169 @@ describe("buildTodoItems (PRD §4.3)", () => {
     const d = baseCandidate({ id: 12, tasks: [task("2026-09-10", 7)] });
     const { items } = buildTodoItems([a, b, d], NOW);
     expect(items.map((i) => i.task.id)).toEqual([6, 7, 5]);
+  });
+});
+
+describe("normalizeChannelInput (PRD F1)", () => {
+  it("accepts bare UC channel IDs (case-sensitive)", () => {
+    expect(normalizeChannelInput("UCXuqSBlHAE6Xw-yeJA0Tunw")).toEqual({
+      ok: true,
+      kind: "channel_id",
+      channel_id: "UCXuqSBlHAE6Xw-yeJA0Tunw",
+    });
+    // 小写 uc / 位数不足不是合法 ID
+    expect(normalizeChannelInput("ucXuqSBlHAE6Xw-yeJA0Tunw").ok).toBe(false);
+    expect(normalizeChannelInput("UCshort").ok).toBe(false);
+  });
+
+  it("accepts bare @handle", () => {
+    expect(normalizeChannelInput("@linustechtips")).toEqual({
+      ok: true,
+      kind: "handle",
+      channel_id: "@linustechtips",
+    });
+  });
+
+  it("accepts /channel/ and /@ URLs with www/m, trailing slash, query params", () => {
+    expect(
+      normalizeChannelInput(
+        "https://www.youtube.com/channel/UCXuqSBlHAE6Xw-yeJA0Tunw?si=abc",
+      ),
+    ).toEqual({
+      ok: true,
+      kind: "channel_id",
+      channel_id: "UCXuqSBlHAE6Xw-yeJA0Tunw",
+    });
+    expect(normalizeChannelInput("https://m.youtube.com/@somehandle/")).toEqual(
+      { ok: true, kind: "handle", channel_id: "@somehandle" },
+    );
+  });
+
+  it("rejects video / short / legacy /c//user/ links with explicit reason", () => {
+    expect(
+      normalizeChannelInput("https://www.youtube.com/watch?v=abc").error,
+    ).toContain("视频链接不支持");
+    expect(normalizeChannelInput("https://youtu.be/abc123").error).toContain(
+      "短链接不支持",
+    );
+    expect(
+      normalizeChannelInput("https://www.youtube.com/c/somename").error,
+    ).toContain("不支持");
+    expect(
+      normalizeChannelInput("https://www.youtube.com/user/somename").error,
+    ).toContain("不支持");
+  });
+});
+
+describe("parseImportText", () => {
+  it("classifies new / exists / invalid / duplicate with exclusive counts", () => {
+    const rows = parseImportText(
+      [
+        "UCXuqSBlHAE6Xw-yeJA0Tunw",
+        "@newhandle",
+        "UCXuqSBlHAE6Xw-yeJA0Tunw",
+        "https://youtu.be/bad",
+        "# comment line",
+        "",
+      ].join("\n"),
+      ["@newhandle"],
+    );
+    expect(rows.map((r) => r.status)).toEqual([
+      "new",
+      "exists",
+      "duplicate",
+      "invalid",
+    ]);
+  });
+});
+
+describe("candidates CSV export (PRD F5)", () => {
+  const ws = baseWorkspace();
+  const make = (o: Partial<Candidate>) => baseCandidate(o);
+
+  it("filters actionable scope: decision + open task + not dnc + not stale", () => {
+    const pcOk = make({
+      id: 1,
+      channel_id: "UCaaaaaaaaaaaaaaaaaaaaaa",
+      screening_decision: "priority_contact",
+      tasks: [task("2026-09-10", 1)],
+    });
+    const paused = make({ id: 2, screening_decision: "paused" });
+    const dnc = make({
+      id: 3,
+      screening_decision: "needs_info",
+      do_not_contact: true,
+      tasks: [task("2026-09-10", 2)],
+    });
+    const noTask = make({ id: 4, screening_decision: "needs_info" });
+    const stale = make({
+      id: 5,
+      screening_decision: "needs_info",
+      tasks: [task("2026-09-10", 3)],
+      data_version: 2,
+      assessment: [
+        {
+          id: 1,
+          scene_fit: "unknown",
+          entity_fit: "unknown",
+          audience_evidence: "unknown",
+          content_scale_fit: "unknown",
+          category_experience: "unknown",
+          decision: "needs_info",
+          reason: "r",
+          evidence: null,
+          open_questions: null,
+          brief_version: 1,
+          data_version: 1,
+          created_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    const picked = exportScopeCandidates(
+      [pcOk, paused, dnc, noTask, stale],
+      ws,
+      "actionable",
+    );
+    expect(picked.map((c) => c.id)).toEqual([1]);
+    expect(isActionable(pcOk, ws)).toBe(true);
+  });
+
+  it("escapes quotes/commas/newlines and neutralizes formula prefixes", () => {
+    const c = make({
+      channel_input: "=SUM(A1)",
+      channel_id: "UCaaaaaaaaaaaaaaaaaaaaaa",
+      assessment: [
+        {
+          id: 1,
+          scene_fit: "unknown",
+          entity_fit: "unknown",
+          audience_evidence: "unknown",
+          content_scale_fit: "unknown",
+          category_experience: "unknown",
+          decision: "needs_info",
+          reason: '他说"贵"，然后走了',
+          evidence: null,
+          open_questions: "第一行\n第二行",
+          brief_version: 1,
+          data_version: 0,
+          created_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    const csv = buildCandidatesCsv([c], ws, "filtered");
+    expect(csv.charCodeAt(0)).toBe(0xfeff); // BOM
+    expect(csv).toContain("'=SUM(A1)"); // 公式前缀被中和
+    expect(csv).toContain('"他说""贵""，然后走了"'); // 引号转义
+    expect(csv).toContain('"第一行\n第二行"'); // 换行封在单元格内
+  });
+
+  it("marks demo rows data_mode=synthetic and real rows real", () => {
+    const demo = make({ channel_id: "demo:01" });
+    const real = make({ channel_id: "UCaaaaaaaaaaaaaaaaaaaaaa" });
+    const csv = buildCandidatesCsv([demo, real], ws, "filtered");
+    expect(csv).toContain("synthetic");
+    expect(csv).toContain("real");
+    // demo 频道不生成 channel_url
+    expect(csv).not.toContain("youtube.com/channel/demo:01");
   });
 });

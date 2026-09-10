@@ -826,6 +826,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/candidates/ImportExportDialogs.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/candidates/CandidateDetailSidebar.tsx",
           "type": "registry:component"
         },

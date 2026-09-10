@@ -44,3 +44,16 @@
 - **侧栏切换守卫实现**：父级持 SidebarHandle（isDirty/saveDraftNow），CandidateDetailSidebar 加 key={selected.id} 强制按候选重建表单（防串数据）；ref 必须用 useImperativeHandle 托管——直接给 ref.current 赋值在组件卸载后残留，导致守卫读取已卸载组件的脏状态误弹（E2E 发现）
 - **时区**：待办分组按 Asia/Shanghai 自然日（workbenchApi.dateInTz，Intl 实现）；提醒阈值 168h 恰好不触发、第 5 次恰好触发，单测以注入时钟锁定边界
 - **verify-t13-t14.mjs 是可重复执行的验证脚本**（非 e2e/ 下的 test runner 用例，那套 fixtures 会清库不能用于含真实 M0 数据的库）：断言 18 项，含 DB 直查（版本去重计数）；运行前需重置种子并把 demo:10 任务改为昨日以构造逾期
+
+## 2026-09-10 · M2 最小接入范围（个人可用标准）
+
+### D6: 导入/获取/导出的范围裁剪与语义
+
+- **范围依据**：用户明确按「个人自用项目」标准裁剪——不追求 PRD 的作品集级验收（A01–A20 全覆盖），只求闭环可用。M4/M5、批量进度恢复（T24 完整版）、source_note 列均后置
+- **导入身份未核实语义**：未配置 Key 时导入直接建候选，`channel_id` 承载规范化入口（UC ID 或 @handle），列表显示「未核实」而非冒充已核实；配置 Key 后「更新资料」完成核实。这偏离 PRD §6.1「缺 Key 只存草稿」——个人单空间无合并风险，且唯一索引仍保证排重
+- **展示名回退 api_cache 标题**：displayName 优先级 first_name/last_name → 频道缓存标题 → channel_id。缓存标题的生命周期跟随 api_cache 刷新/过期，不写入永久字段（遵守开发计划 §3「API 字段副本」警告的轻量版）
+- **资料版本复核**：contacts.data_version 由 youtube-fetch 成功后递增；isReviewStale 增加 `assessment.data_version < contacts.data_version` 分支；保存评估固定当前 data_version 作为判断依据；「确认仍适用」对当前版本确认
+- **TESTKEY 受控测试 provider**：YOUTUBE_API_KEY=TESTKEY 时函数返回固定夹具（完整/原始 0 值/统计缺失/隐藏订阅数），用于无 Key 验证全管线，不伪装真实数据（缓存 source='test'，列表显示「测试资料」）
+- **Edge Function 本地运行**：`npx supabase functions serve --env-file supabase/functions/.env`（该文件已 gitignore，存 YOUTUBE_API_KEY 与 SB_JWT_ISSUER）。本地 serve 的坑：函数运行时 SUPABASE_URL 是容器内部地址，AuthMiddleware 校验 JWT iss 失败，需在 env 设 `SB_JWT_ISSUER=http://127.0.0.1:54321/auth/v1`；supabase-js 2.90 的 FunctionsHttpError 无 .json()，错误体在 `error.context`（Response）上读
+- **导出为前端生成**：个人本地应用无并发写风险，数量预览与文件同源于同一次内存查询，天然满足「预览=文件同条件」；服务端导出无必要性
+- **T15 完成定义**：数据指纹（contacts/assessment/导入/M0 四项计数）跨 `supabase stop`+`start` 一致 + 重启后两套 E2E 脚本全过。容器级重建未做（D3 风险约定：强杀会移除容器；stop/start 已覆盖同一 volume 持久化路径）

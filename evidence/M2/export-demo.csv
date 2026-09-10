@@ -1,0 +1,11 @@
+﻿channel_input,channel_id,channel_url,channel_name,source_note,decision,reason,evidence_refs,open_questions,next_action,next_action_date,last_contact_at,contact_count,do_not_contact,reviewed_at,review_stale,data_mode
+demo:01,demo:01,,【演示】山林工坊 DIY,,优先联系,【演示】DIY 木工场景实测，受众与产品高度相关,https://example.com/video/demo01 · 视频演示了挂墙找平场景,,首次联系,2026-09-11,,0,FALSE,2026-09-10,FALSE,synthetic
+demo:02,demo:02,,【演示】Builder 小站,,未评估,,,,补资料,2026-09-15,,0,FALSE,,FALSE,synthetic
+demo:03,demo:03,,【演示】ProTool 官方频道,,未评估,,,,,,,0,FALSE,,FALSE,synthetic
+demo:04,demo:04,,【演示】工具测评实验室,,未评估,,,,,,,0,FALSE,,FALSE,synthetic
+demo:05,demo:05,,【演示】老屋改造记,,未评估,,,,,,,0,FALSE,,FALSE,synthetic
+demo:06,demo:06,,【演示】美食厨房日记,,暂缓,【演示】内容为美食烘焙场景，与测量工具品类不适配,,,,,,0,FALSE,2026-09-10,FALSE,synthetic
+demo:07,demo:07,,【演示】周末修理工,,未评估,,,,,,2026-09-08,1,FALSE,,FALSE,synthetic
+demo:08,demo:08,,【演示】创客工坊 Max,,未评估,,,,,,2026-09-01,5,FALSE,,FALSE,synthetic
+demo:09,demo:09,,【演示】海外工具哥,,待补资料,,,,,,2026-08-06,1,TRUE,,FALSE,synthetic
+demo:10,demo:10,,【演示】新晋工具Up主,,待补资料,【演示】频道较新，先核实内容方向与受众地区,,受众地区是否以美国为主？,,,,0,FALSE,2026-09-10,FALSE,synthetic

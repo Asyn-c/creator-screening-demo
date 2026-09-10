@@ -57,4 +57,4 @@ node_modules/
 /playwright/.auth/
 
 *.lock
- 
+ supabase/functions/.env

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "../providers/supabase/supabase";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 /**
  * 初筛工作台数据访问层（M1/T12）
@@ -135,6 +136,7 @@ export interface Candidate {
   do_not_contact_reason: string | null;
   workspace_id: number;
   assessment_draft: AssessmentDraft | null;
+  data_version: number;
   api_cache: ApiCacheRow[];
   tasks: TaskRow[];
   assessment: AssessmentRow[];
@@ -203,6 +205,7 @@ export async function fetchCandidates(wsId: number): Promise<Candidate[]> {
     .select(
       `id, first_name, last_name, channel_input, channel_id, screening_decision,
        screening_reason, do_not_contact, do_not_contact_reason, workspace_id, assessment_draft,
+       data_version,
        api_cache(id, kind, raw, source, fetched_at, expires_at),
        tasks(id, type, text, due_date, done_date, cancelled_at),
        assessment(id, scene_fit, entity_fit, audience_evidence, content_scale_fit,
@@ -358,23 +361,35 @@ export function lastSentAt(c: Candidate): string | null {
 export function isReviewStale(c: Candidate, ws: Workspace): boolean {
   const a = latestAssessment(c);
   if (!a) return false;
-  return a.brief_version < ws.brief_version;
+  if (a.brief_version < ws.brief_version) return true;
+  // 外部资料刷新后（data_version 递增），按旧资料做出的判断进入待复核
+  if (a.data_version != null && a.data_version < (c.data_version ?? 0))
+    return true;
+  return false;
 }
 
 export function dataStatus(c: Candidate): string {
   const rows = c.api_cache ?? [];
-  if (rows.length === 0) return "待获取";
+  if (rows.length === 0) {
+    // 无缓存：真实空间视为身份未核实/资料未获取，demo 空间不应出现该状态
+    return c.channel_id?.startsWith("demo:") ? "待获取" : "未核实";
+  }
   const ch = channelStats(c);
+  if (ch && new Date(ch.expires_at) < new Date()) return "待更新";
   const missing = videos(c).some(
     (v) => v.raw.view_count == null || v.raw.like_count == null,
   );
   if (ch && ch.source === "synthetic") return "演示资料";
+  if (ch && ch.source === "test") return "测试资料";
   return missing ? "部分缺失" : "已获取";
 }
 
 export function displayName(c: Candidate): string {
   const n = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
-  return n || c.channel_id || `候选 #${c.id}`;
+  if (n) return n;
+  // 展示名回退到资料缓存标题：其生命周期跟随缓存刷新/过期，不写入永久字段
+  const title = channelStats(c)?.raw.title;
+  return title || c.channel_id || `候选 #${c.id}`;
 }
 
 // ---------- 时区日期工具（PRD §7：due_date 按 Asia/Shanghai 自然日，不用 UTC 零点） ----------
@@ -463,4 +478,313 @@ export function buildTodoItems(
   const counts: Record<TodoGroup, number> = { overdue: 0, today: 0, later: 0 };
   for (const it of items) counts[it.group]++;
   return { items, counts };
+}
+
+// ---------- 频道入口归一化（PRD F1：先本地预检，未配置 Key 时不冒充已核实身份） ----------
+
+export type ChannelInputKind = "channel_id" | "handle";
+
+export interface NormalizedInput {
+  ok: boolean;
+  kind?: ChannelInputKind;
+  channel_id?: string;
+  error?: string;
+}
+
+/** UC 频道 ID：24 字符、大小写敏感（UC + 22 个 base64 字符） */
+const UC_ID_RE = /^UC[\w-]{22}$/;
+
+export function normalizeChannelInput(raw: string): NormalizedInput {
+  const input = raw.trim();
+  if (!input) return { ok: false, error: "输入为空" };
+
+  // 1) 裸 UC ID
+  if (UC_ID_RE.test(input))
+    return { ok: true, kind: "channel_id", channel_id: input };
+
+  // 2) 裸 @handle
+  if (/^@[\w.-]{3,30}$/.test(input))
+    return { ok: true, kind: "handle", channel_id: input };
+
+  // 3) URL：接受 www/m 域名与末尾斜杠，去掉查询参数
+  const urlMatch = input.match(
+    /^https?:\/\/(www\.|m\.)?youtube\.com\/(channel\/|@)([^\s/?]+)\/?(?:\?.*)?$/i,
+  );
+  if (urlMatch) {
+    const [, , pathKind, value] = urlMatch;
+    if (pathKind === "channel/") {
+      if (UC_ID_RE.test(value))
+        return { ok: true, kind: "channel_id", channel_id: value };
+      return { ok: false, error: `/channel/ 后不是有效的 UC 频道 ID` };
+    }
+    return { ok: true, kind: "handle", channel_id: `@${value}` };
+  }
+
+  // 4) 明确不支持的入口：报原因，不猜测匹配
+  if (/youtu\.be\//i.test(input))
+    return { ok: false, error: "短链接不支持，请提供频道 ID 或 @handle" };
+  if (/youtube\.com\/(watch|shorts)[/]?/i.test(input))
+    return { ok: false, error: "视频链接不支持，请提供频道 ID 或 @handle" };
+  if (/youtube\.com\/(c|user)\//i.test(input))
+    return {
+      ok: false,
+      error: "旧版 /c/、/user/ 路径不支持，请提供频道 ID 或 @handle",
+    };
+  if (/youtube\.com/i.test(input))
+    return {
+      ok: false,
+      error: "无法识别的 YouTube 链接，请提供频道 ID 或 @handle",
+    };
+
+  return { ok: false, error: "请提供频道 ID（UC…）或 @handle" };
+}
+
+// ---------- 导入（本地解析 + 空间内排重；未配置 Key 时不调用外部接口） ----------
+
+export const IMPORT_MAX_ROWS = 20;
+export const IMPORT_MAX_BYTES = 1024 * 1024;
+
+export interface ImportRowResult {
+  line: number;
+  input: string;
+  status: "new" | "exists" | "invalid" | "duplicate";
+  channel_id?: string;
+  error?: string;
+}
+
+/** 解析多行输入（每行一个入口）；返回逐行结果，不写库 */
+export function parseImportText(
+  text: string,
+  existingChannelIds: string[],
+): ImportRowResult[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith("#"));
+  const seen = new Set<string>();
+  const existing = new Set(existingChannelIds);
+  return lines.map((line, i) => {
+    const norm = normalizeChannelInput(line);
+    if (!norm.ok) {
+      return {
+        line: i + 1,
+        input: line,
+        status: "invalid" as const,
+        error: norm.error,
+      };
+    }
+    const cid = norm.channel_id!;
+    if (seen.has(cid)) {
+      return {
+        line: i + 1,
+        input: line,
+        status: "duplicate" as const,
+        channel_id: cid,
+      };
+    }
+    seen.add(cid);
+    if (existing.has(cid)) {
+      return {
+        line: i + 1,
+        input: line,
+        status: "exists" as const,
+        channel_id: cid,
+      };
+    }
+    return {
+      line: i + 1,
+      input: line,
+      status: "new" as const,
+      channel_id: cid,
+    };
+  });
+}
+
+export interface ImportCounts {
+  total: number;
+  created: number;
+  existed: number;
+  invalid: number;
+  duplicate: number;
+}
+
+export async function importCandidates(
+  wsId: number,
+  results: ImportRowResult[],
+): Promise<ImportCounts> {
+  const salesIdRes = await getSupabaseClient()
+    .from("workspace")
+    .select("sales_id")
+    .eq("id", wsId)
+    .single();
+  if (salesIdRes.error) throw salesIdRes.error;
+
+  const toCreate = results.filter((r) => r.status === "new" && r.channel_id);
+  for (const r of toCreate) {
+    // 未配置 Key 时身份未经官方接口核实：channel_id 直接承载规范化入口（UC ID 或 @handle），
+    // 资料状态显示「未核实」，配置 Key 后用「更新资料」完成核实
+    const { error } = await getSupabaseClient().from("contacts").insert({
+      workspace_id: wsId,
+      sales_id: salesIdRes.data.sales_id,
+      channel_input: r.input,
+      channel_id: r.channel_id,
+      screening_decision: "unassessed",
+    });
+    if (error) throw error;
+  }
+  const counts: ImportCounts = {
+    total: results.length,
+    created: toCreate.length,
+    existed: results.filter((r) => r.status === "exists").length,
+    invalid: results.filter((r) => r.status === "invalid").length,
+    duplicate: results.filter((r) => r.status === "duplicate").length,
+  };
+  // 互斥计数校验：总和必须等于总行数
+  if (
+    counts.created + counts.existed + counts.invalid + counts.duplicate !==
+    counts.total
+  ) {
+    throw new Error("导入计数不一致");
+  }
+  return counts;
+}
+
+// ---------- CSV 导出（PRD F5：17 字段、BOM、转义、公式防护、模式标记） ----------
+
+export type ExportScope = "actionable" | "filtered";
+
+export const EXPORT_COLUMNS = [
+  "channel_input",
+  "channel_id",
+  "channel_url",
+  "channel_name",
+  "source_note",
+  "decision",
+  "reason",
+  "evidence_refs",
+  "open_questions",
+  "next_action",
+  "next_action_date",
+  "last_contact_at",
+  "contact_count",
+  "do_not_contact",
+  "reviewed_at",
+  "review_stale",
+  "data_mode",
+] as const;
+
+/** 可行动名单条件（PRD §4.3）：正式候选 + 优先联系/待补资料 + open 任务 + 未停止联系 + 非待复核 */
+export function isActionable(c: Candidate, ws: Workspace): boolean {
+  if (c.channel_id == null) return false;
+  if (
+    c.screening_decision !== "priority_contact" &&
+    c.screening_decision !== "needs_info"
+  )
+    return false;
+  if (!openTask(c)) return false;
+  if (c.do_not_contact) return false;
+  if (isReviewStale(c, ws)) return false;
+  return true;
+}
+
+export function exportScopeCandidates(
+  candidates: Candidate[],
+  ws: Workspace,
+  scope: ExportScope,
+): Candidate[] {
+  return scope === "actionable"
+    ? candidates.filter((c) => isActionable(c, ws))
+    : candidates;
+}
+
+/** 单元格转义：含逗号/引号/换行加引号；以 =+-@ 开头按表格安全文本转义（防公式执行） */
+function csvCell(value: string): string {
+  const v =
+    /^[=+@]/.test(value) || /^-[^0-9]/.test(value) || /^-$/.test(value)
+      ? `'${value}`
+      : value;
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
+}
+
+export function buildCandidatesCsv(
+  candidates: Candidate[],
+  ws: Workspace,
+  scope: ExportScope,
+): string {
+  const rows = exportScopeCandidates(candidates, ws, scope);
+  const lines = [EXPORT_COLUMNS.join(",")];
+  for (const c of rows) {
+    const latest = latestAssessment(c);
+    const task = openTask(c);
+    const isDemo = c.channel_id?.startsWith("demo:") || ws.mode === "demo";
+    const cells = [
+      c.channel_input ?? "",
+      c.channel_id ?? "",
+      c.channel_id && /^UC[\w-]{22}$/.test(c.channel_id)
+        ? `https://www.youtube.com/channel/${c.channel_id}`
+        : "",
+      displayName(c),
+      "", // source_note：本版无独立来源备注列
+      DECISION_LABELS[c.screening_decision],
+      latest?.reason ?? "",
+      latest?.evidence ?? "",
+      latest?.open_questions ?? "",
+      task ? (TASK_TYPE_LABELS[task.type as TaskType] ?? task.type ?? "") : "",
+      task ? dateInTz(task.due_date) : "",
+      lastSentAt(c)?.slice(0, 10) ?? "",
+      String(validSentEvents(c).length),
+      c.do_not_contact ? "TRUE" : "FALSE",
+      latest ? dateInTz(latest.created_at) : "",
+      isReviewStale(c, ws) ? "TRUE" : "FALSE",
+      isDemo ? "synthetic" : "real",
+    ];
+    lines.push(cells.map(csvCell).join(","));
+  }
+  // UTF-8 BOM：Excel/Sheets 直接打开不乱码
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+export function downloadCsv(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- 资料获取（Edge Function 服务端持有 Key；示例空间不请求真实接口） ----------
+
+export interface FetchResult {
+  configured: boolean;
+  error?: string;
+  videos?: number;
+  warning?: string;
+}
+
+export async function fetchChannelData(
+  candidateId: number,
+  workspaceId: number,
+): Promise<FetchResult> {
+  const { data, error } = await getSupabaseClient().functions.invoke(
+    "youtube-fetch",
+    { body: { candidate_id: candidateId, workspace_id: workspaceId } },
+  );
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      // 函数返回非 2xx：错误原因在 context（原始 Response）里
+      const body = await (error as any).context?.json?.().catch(() => null);
+      return {
+        configured: true,
+        error: (body as any)?.error ?? "资料获取失败",
+      };
+    }
+    return {
+      configured: true,
+      error: (error as any).message ?? "资料获取失败",
+    };
+  }
+  return data as FetchResult;
 }
