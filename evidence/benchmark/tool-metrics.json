@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-09-10T15:37:36.061Z",
+  "actions": 119,
+  "phases": {
+    "setup_import_s": 1.006,
+    "setup_fetch_s": 7.93,
+    "setup_fetch_wait_s": 0.595,
+    "active_assess_s": 17.996,
+    "active_export_s": 0.346
+  },
+  "finished_at": "2026-09-10T15:38:07.285Z",
+  "total_machine_s": 27.278
+}

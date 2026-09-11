@@ -1,0 +1,21 @@
+case_id,build_commit,executed_at,mode,input_ref,steps_ref,expected,actual,status,evidence_ref,issue_id
+A01,9ce3236,2026-09-10,real,空库真实空间,打开工作台真实空间;curl youtube-fetch(无Key env),空列表+可配置任务背景+可导入+未配置Key明确提示,三项均符合;无Key返回 configured:false+「自动资料获取未启用」,passed,evidence/M1/m1-01-workbench-real-empty.png;无Key curl 实测(D6),
+A02,9ce3236,,real,10个真实频道入口,导入→获取→人工名单,全部解析正确+原始字段对应+可完成名单,未执行:无真实 YouTube API Key,blocked,,需要用户配置 YOUTUBE_API_KEY
+A03,9ce3236,2026-09-10,real/test,UC ID+@handle+URL混合,单测 normalizeChannelInput;E2E S12 重复行,同频道仅建一个候选+计数正确,本地归一化通过(URL→UC/@handle 规范);但 handle↔UC ID 指向同一频道的合并需官方接口确认(缺Key),partial,workbenchApi.test.ts;evidence/M2/m2-01,A03-cross-merge需Key
+A04,9ce3236,2026-09-10,real,2无效+4有效混合粘贴,E2E verify-m2 S12/S12b,无效行指出原因+有效行继续+重试不重复建档,新增2/无效2/重复2互斥计数;再导入已存在1/新增1;均符合,passed,evidence/M2/m2-01-import-preview.png;evidence/M2/m2-02-imported.png,
+A05,11eba45,2026-09-11,real,再导入已有评估与任务的频道(含Nox导出CSV),E2E verify-nox-bridge S2-S5,判断和联系历史保留+来源追加需确认,判断/任务/历史不被覆盖;未勾选时备注不变;勾选后来源备注追加(含日期与结论);Nox列名自动识别+未识别列提示,passed,evidence/acceptance/a05-01-nox-preview.png;a05-02-source-note-sidebar.png;a05-03-appended.png,
+A06,9ce3236,2026-09-10,unit,缺Key/配额/超时错误,mapper单测 explainYouTubeError;无Key分支curl实测,原因可区分+不无限重试+无假数据+可继续人工编辑,Key无效/配额/权限/404/5xx分类文案单测通过;缺Key实测返回未启用提示;配额与网络超时的端到端受控注入未做,partial,supabase/functions/youtube-fetch/mapper.test.ts,A06-quota-inject
+A07,9ce3236,2026-09-10,test,统计缺失+0观看+少于10视频,TESTKEY夹具+demo:04种子;E2E S13,未知与0分开+显示实际数量+不补值,0值显示0/缺失显示未知/频道3条视频显示3;均符合,passed,evidence/M2/m2-03-fetch-test.png,
+A08,9ce3236,2026-09-10,demo,优先联系缺证据/缺任务,RPC冒烟:demo:07缺evidence提交,保存提示具体缺项+可先存草稿,RPC拒绝:priority_contact requires reason evidence scene_fit=yes;草稿功能E2E S5通过,passed,DB冒烟记录(STATUS 2026-09-10);evidence/M1/t14-05-draft-restored.png,
+A09,9ce3236,2026-09-10,demo,demo:01受众未知但有场景证据+询问任务,E2E S3,可优先联系+未知显著保留+不宣称美国受众,保存成功;受众检查项保持未知展示;校验规则不要求audience_evidence,passed,evidence/M1/t14-03-priority-saved.png,
+A10,9ce3236,2026-09-10,demo,无正向证据保存待补资料,E2E+RPC冒烟T8,问题与任务完整即可保存,通过:仅要求open_questions+任务,passed,evidence/M1/t14-03;DB冒烟,
+A11,9ce3236,2026-09-10,demo/test,更改任务背景+刷新资料,brief分支:E2E S6 demo:10;资料分支:benchmark实测(获取→保存→再获取→待复核),历史判断保留+待复核+默认导出排除+确认后恢复,brief_version分支全通过;data_version分支:benchmark脚本实测通过(刷新后待复核徽章出现),passed,evidence/M1/t14-06-confirm-review.png;evidence/benchmark/,
+A12,9ce3236,2026-09-10,demo,5次发信/最近<168h,单测(恰好168h不触发/4次不触发/撤销排除/补录重算)+E2E S8,正确提醒+草稿导出不计数,单测边界全过;demo:07间隔/demo:08次数提醒徽章+横幅+开关均通过,passed,workbenchApi.test.ts;evidence/M1/t14-08-reminder-banner.png,
+A13,8390eb9,2026-09-11,demo,撤销误记/补录更早事件,单测contactReminders重算+E2E verify-m3 S1-S3(记录/撤销回到无记录/未来时间拒绝/过去补录),撤销后按有效事件重算+历史排序正确,记录与撤销UI完成;未来时间服务端拒绝;补录过去时间成功,passed,evidence/M3/m3-01-record-void.png;m3-02-future-rejected.png,
+A14,8390eb9,2026-09-11,demo,暂缓/停止联系,RPC冒烟(暂缓取消)+E2E verify-m3 S4-S6(设置DNC取消联系任务/历史保留/解除需原因/DNC期间可补录)+isActionable单测,取消对应任务+停止联系排除默认可行动名单,设置/解除UI完成且联动任务取消;DNC期间补录历史事实通过;列表行徽章显示,passed,evidence/M3/m3-03-dnc-set.png;m3-04-dnc-unset.png;m3-05-dnc-backfill.png,
+A15,9ce3236,2026-09-10,demo,完成今天任务+重启服务,E2E S7;T15 stop/start回归,状态持久化+待办只显示open+分组正确,完成任务后待办移除;stop/start数据指纹一致;18/18+8/8复跑通过,passed,evidence/M1/t14-07-task-completed-todo.png;STATUS T15记录,
+A16,9ce3236,2026-09-10,both,含中文/逗号/引号/换行/公式字符字段,单测 csvCell+buildCandidatesCsv;E2E下载校验,列和数量正确+文本安全+模式标记保留,BOM+17列表头+公式前缀转义+引号换行转义均通过;DEMO文件名+synthetic行通过,passed,workbenchApi.test.ts;evidence/M2/export-sample.csv,
+A17,9ce3236,2026-09-10,both,示例重置后切回真实,E2E S10;T15,真实数据未受影响+示例全程标记,模式隔离通过(真实空间M0记录在/演示0串入);一键重置示例入口未实现(文案已修正为指引SQL),partial,evidence/M1/t14-11-real-isolated.png,M3-T33
+A18,9ce3236,2026-09-10,test,缓存过期且刷新失败,dataStatus检查expires_at,过期值不冒充新值+按规则清理+判断提示复核,过期状态显示「待更新」;自动清理动作未实现(仅标记),partial,workbenchApi.ts dataStatus,A18-cleanup
+A19,9ce3236,2026-09-10,demo,修改详情后关闭未保存侧栏,E2E S4守卫+S9失败保留,提示保存/放弃+服务错误保留输入,守卫三选(继续编辑/放弃/保存草稿并继续)通过;abort注入后输入保留通过,passed,evidence/M1/t14-04-unsaved-guard.png;t14-10,
+A20,11eba45,2026-09-11,demo,删除有业务记录的候选(demo:08:6条联系事件),E2E verify-a20:对话框列出删除清单+勾选确认后执行,确认范围+级联删除+其他候选与示例空间不变,对话框列出评估/任务/事件/缓存计数+未勾选禁用;删除后候选消失/其他候选与真实空间不变(M0=3)/关联事件级联清除;跨空间id服务端拒绝,passed,evidence/acceptance/a20-01-confirm-dialog.png;a20-02-deleted.png,
