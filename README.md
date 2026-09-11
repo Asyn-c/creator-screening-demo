@@ -5,7 +5,7 @@
 > 把分散的达人候选资料、人工判断和下一步行动连成闭环的本地工作台。
 > A local workbench that connects scattered creator profiles, human judgment, and next actions into one closed loop.
 
-源自一段工具出海品牌的达人营销实习：维护 9 位达人、34 字段的资源表时，在频道页、资料和表格之间反复切换，判断依据散落备注，筛完还要手工重组联系名单。这个工具把「导入候选 → 自动整理资料 → 人工初筛 → 下一步任务 → 导出名单」做成了一个可验证的闭环。
+源自一段工具出海品牌的达人营销经历：维护数位达人、34字段的资源表时，在频道页、资料和表格之间反复切换，判断依据散落备注，筛完还要手工重组联系名单。这个工具把「导入候选 → 自动整理资料 → 人工初筛 → 下一步任务 → 导出名单」做成了一个可验证的闭环。
 
 Born from an influencer-marketing internship at a tools/DTC brand: while maintaining a 9-creator, 34-column prospect sheet, work meant constant switching between channel pages, data sources, and spreadsheets, with judgment rationale scattered across notes. This tool turns "import candidates → auto-organize profiles → manual screening → next-step tasks → export list" into one verifiable loop.
 
