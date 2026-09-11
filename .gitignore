@@ -39,7 +39,6 @@ dist/
 # Shadcn Registry
 public/r/
 
-!supabase/functions/.env
 .claude/settings.local.json
 
 # Harness scratch (promotion lock; worktrees + test-results also cleaned at SessionEnd)
@@ -57,4 +56,6 @@ node_modules/
 /playwright/.auth/
 
 *.lock
- supabase/functions/.env
+
+# Local Edge Function env (real API key, never commit)
+supabase/functions/.env
