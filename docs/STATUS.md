@@ -45,6 +45,14 @@
 - 真实数据验证：MrBeast 频道（总播放 1396 亿/视频 1000/描述植入识别 Call of Duty、Homecare+、#oldnavypartner）；mapper 单测 7 项通过
 - 顺带修复：supabase/functions/.env 被上游白名单规则误跟踪（真实 Key 曾进入一个未推送的本地提交，已 amend+gc 清除，全历史无 Key；.gitignore 修正）
 
+## 方案A：Nox CSV 桥 + A05（2026-09-11）
+
+- contacts.source_note 列（第4次视图重建，security_invoker 保持）
+- 导入对话框三模式：Nox/Modash 等工具导出 CSV（列名自动识别，中英变体）→ 结论构建来源备注；本工具模板 CSV（channel_input，顺带修复模板上传失效）；纯行文本
+- 已存在候选来源备注勾选确认后追加；侧栏展示来源备注；导出 source_note 列填充
+- E2E verify-nox-bridge.mjs 8/8；toolImport 单测 7 项
+- 验收状态：**14→15 passed**（A05 转正）
+
 ## 未完成 / 阻塞
 
 - ~~M2 真实接入需要 YouTube API Key（待用户配置）~~ → **2026-09-11 已配置真实 Key 并打通全链路**（真实频道拉取成功：MrBeast 频道订阅 5.16 亿/US/10 条视频/统计完整；容器代理方案见 DECISIONS D7）。A02 真实验收待用户导入 10 个自有频道执行

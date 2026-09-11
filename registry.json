@@ -822,6 +822,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/candidates/toolImport.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/candidates/WorkbenchPage.tsx",
           "type": "registry:component"
         },

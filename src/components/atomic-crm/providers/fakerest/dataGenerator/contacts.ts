@@ -101,6 +101,7 @@ export const generateContacts = (db: Db, size = 500): Required<Contact>[] => {
       channel_id: null,
       screening_decision: "unassessed",
       screening_reason: null,
+      source_note: null,
     };
   });
 };

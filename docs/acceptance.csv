@@ -3,7 +3,7 @@ A01,9ce3236,2026-09-10,real,空库真实空间,打开工作台真实空间;curl 
 A02,9ce3236,,real,10个真实频道入口,导入→获取→人工名单,全部解析正确+原始字段对应+可完成名单,未执行:无真实 YouTube API Key,blocked,,需要用户配置 YOUTUBE_API_KEY
 A03,9ce3236,2026-09-10,real/test,UC ID+@handle+URL混合,单测 normalizeChannelInput;E2E S12 重复行,同频道仅建一个候选+计数正确,本地归一化通过(URL→UC/@handle 规范);但 handle↔UC ID 指向同一频道的合并需官方接口确认(缺Key),partial,workbenchApi.test.ts;evidence/M2/m2-01,A03-cross-merge需Key
 A04,9ce3236,2026-09-10,real,2无效+4有效混合粘贴,E2E verify-m2 S12/S12b,无效行指出原因+有效行继续+重试不重复建档,新增2/无效2/重复2互斥计数;再导入已存在1/新增1;均符合,passed,evidence/M2/m2-01-import-preview.png;evidence/M2/m2-02-imported.png,
-A05,9ce3236,2026-09-10,real,再导入已有评估与任务的频道,E2E S12b,判断和联系历史保留+来源追加需确认,判断/任务/历史保留通过;来源追加确认未实现(无source_note列),partial,evidence/M2/m2-02-imported.png,source_note列M3
+A05,11eba45,2026-09-11,real,再导入已有评估与任务的频道(含Nox导出CSV),E2E verify-nox-bridge S2-S5,判断和联系历史保留+来源追加需确认,判断/任务/历史不被覆盖;未勾选时备注不变;勾选后来源备注追加(含日期与结论);Nox列名自动识别+未识别列提示,passed,evidence/acceptance/a05-01-nox-preview.png;a05-02-source-note-sidebar.png;a05-03-appended.png,
 A06,9ce3236,2026-09-10,unit,缺Key/配额/超时错误,mapper单测 explainYouTubeError;无Key分支curl实测,原因可区分+不无限重试+无假数据+可继续人工编辑,Key无效/配额/权限/404/5xx分类文案单测通过;缺Key实测返回未启用提示;配额与网络超时的端到端受控注入未做,partial,supabase/functions/youtube-fetch/mapper.test.ts,A06-quota-inject
 A07,9ce3236,2026-09-10,test,统计缺失+0观看+少于10视频,TESTKEY夹具+demo:04种子;E2E S13,未知与0分开+显示实际数量+不补值,0值显示0/缺失显示未知/频道3条视频显示3;均符合,passed,evidence/M2/m2-03-fetch-test.png,
 A08,9ce3236,2026-09-10,demo,优先联系缺证据/缺任务,RPC冒烟:demo:07缺evidence提交,保存提示具体缺项+可先存草稿,RPC拒绝:priority_contact requires reason evidence scene_fit=yes;草稿功能E2E S5通过,passed,DB冒烟记录(STATUS 2026-09-10);evidence/M1/t14-05-draft-restored.png,

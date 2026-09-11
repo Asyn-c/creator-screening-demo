@@ -410,9 +410,25 @@ export function CandidateDetailSidebar({
                   {ch.raw.description}
                 </div>
               )}
+              {candidate.source_note && (
+                <div className="border rounded p-2 whitespace-pre-line">
+                  <span className="font-medium">来源备注：</span>
+                  <span className="text-muted-foreground">
+                    {candidate.source_note}
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">暂无频道资料</p>
+          )}
+          {!ch && candidate.source_note && (
+            <div className="border rounded p-2 text-sm whitespace-pre-line">
+              <span className="font-medium">来源备注：</span>
+              <span className="text-muted-foreground">
+                {candidate.source_note}
+              </span>
+            </div>
           )}
           <div className="space-y-1">
             <p className="text-sm font-medium">

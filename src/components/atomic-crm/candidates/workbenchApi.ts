@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "../providers/supabase/supabase";
 import { FunctionsHttpError } from "@supabase/supabase-js";
+import { parseToolCsv, parseOwnTemplateCsv } from "./toolImport";
 
 /**
  * 初筛工作台数据访问层（M1/T12）
@@ -141,6 +142,8 @@ export interface Candidate {
   do_not_contact_reason: string | null;
   workspace_id: number;
   assessment_draft: AssessmentDraft | null;
+  /** 来源备注：外部工具（Nox 等）导出结论/模板备注，作为可追溯判断依据，非原始数据 */
+  source_note: string | null;
   data_version: number;
   api_cache: ApiCacheRow[];
   tasks: TaskRow[];
@@ -210,7 +213,7 @@ export async function fetchCandidates(wsId: number): Promise<Candidate[]> {
     .select(
       `id, first_name, last_name, channel_input, channel_id, screening_decision,
        screening_reason, do_not_contact, do_not_contact_reason, workspace_id, assessment_draft,
-       data_version,
+       source_note, data_version,
        api_cache(id, kind, raw, source, fetched_at, expires_at),
        tasks(id, type, text, due_date, done_date, cancelled_at),
        assessment(id, scene_fit, entity_fit, audience_evidence, content_scale_fit,
@@ -668,6 +671,108 @@ export interface ImportRowResult {
   status: "new" | "exists" | "invalid" | "duplicate";
   channel_id?: string;
   error?: string;
+  /** 工具导出摘要/模板备注；新建时随行写入，已存在时可确认追加 */
+  sourceNote?: string;
+}
+
+export type ImportMode = "lines" | "tool" | "template";
+
+export interface ImportPreview {
+  mode: ImportMode;
+  rows: ImportRowResult[];
+  /** 工具导出中未识别的列（本版不导入，PRD F1） */
+  unknownColumns: string[];
+}
+
+/** 统一解析入口：工具导出 CSV / 本工具模板 CSV / 纯行文本 */
+export function parseImportContent(
+  text: string,
+  existingChannelIds: string[],
+): ImportPreview {
+  const trimmed = text.trim();
+  if (trimmed && trimmed.includes(",")) {
+    const tool = parseToolCsv(trimmed, IMPORT_MAX_ROWS);
+    if (tool.map) {
+      const existing = new Set(existingChannelIds);
+      const seen = new Set<string>();
+      const rows: ImportRowResult[] = [];
+      tool.rows.forEach((r, i) => {
+        const normed = normalizeChannelInput(r.input);
+        if (!normed.ok) {
+          rows.push({
+            line: i + 1,
+            input: r.input,
+            status: "invalid",
+            error: normed.error,
+          });
+          return;
+        }
+        const cid = normed.channel_id!;
+        if (seen.has(cid)) {
+          rows.push({
+            line: i + 1,
+            input: r.input,
+            status: "duplicate",
+            channel_id: cid,
+          });
+          return;
+        }
+        seen.add(cid);
+        if (existing.has(cid)) {
+          rows.push({
+            line: i + 1,
+            input: r.input,
+            status: "exists",
+            channel_id: cid,
+            sourceNote: r.sourceSummary,
+          });
+          return;
+        }
+        seen.add(cid);
+        rows.push({
+          line: i + 1,
+          input: r.input,
+          status: "new",
+          channel_id: cid,
+          sourceNote: r.sourceSummary,
+        });
+      });
+      const unknown = [...new Set(tool.rows.flatMap((r) => r.unknownColumns))];
+      return { mode: "tool", rows, unknownColumns: unknown };
+    }
+    const own = parseOwnTemplateCsv(trimmed, IMPORT_MAX_ROWS);
+    if (own.length > 0) {
+      const existing = new Set(existingChannelIds);
+      const rows: ImportRowResult[] = own.map((r, i) => {
+        const normed = normalizeChannelInput(r.input);
+        if (!normed.ok) {
+          return {
+            line: i + 1,
+            input: r.input,
+            status: "invalid" as const,
+            error: normed.error,
+          };
+        }
+        const cid = normed.channel_id!;
+        const status = existing.has(cid)
+          ? ("exists" as const)
+          : ("new" as const);
+        return {
+          line: i + 1,
+          input: r.input,
+          status,
+          channel_id: cid,
+          sourceNote: r.sourceSummary,
+        };
+      });
+      return { mode: "template", rows, unknownColumns: [] };
+    }
+  }
+  return {
+    mode: "lines",
+    rows: parseImportText(text, existingChannelIds),
+    unknownColumns: [],
+  };
 }
 
 /** 解析多行输入（每行一个入口）；返回逐行结果，不写库 */
@@ -729,6 +834,7 @@ export interface ImportCounts {
 export async function importCandidates(
   wsId: number,
   results: ImportRowResult[],
+  opts: { appendSourceNote?: boolean } = {},
 ): Promise<ImportCounts> {
   const salesIdRes = await getSupabaseClient()
     .from("workspace")
@@ -741,15 +847,50 @@ export async function importCandidates(
   for (const r of toCreate) {
     // 未配置 Key 时身份未经官方接口核实：channel_id 直接承载规范化入口（UC ID 或 @handle），
     // 资料状态显示「未核实」，配置 Key 后用「更新资料」完成核实
-    const { error } = await getSupabaseClient().from("contacts").insert({
-      workspace_id: wsId,
-      sales_id: salesIdRes.data.sales_id,
-      channel_input: r.input,
-      channel_id: r.channel_id,
-      screening_decision: "unassessed",
-    });
+    const { error } = await getSupabaseClient()
+      .from("contacts")
+      .insert({
+        workspace_id: wsId,
+        sales_id: salesIdRes.data.sales_id,
+        channel_input: r.input,
+        channel_id: r.channel_id,
+        screening_decision: "unassessed",
+        source_note: r.sourceNote || null,
+      });
     if (error) throw error;
   }
+  // 已存在候选的来源备注：仅在用户确认勾选后追加（PRD F1「新增来源备注需用户确认追加」）
+  if (opts.appendSourceNote) {
+    const toAppend = results.filter(
+      (r) => r.status === "exists" && r.channel_id && r.sourceNote,
+    );
+    if (toAppend.length > 0) {
+      const ids = toAppend.map((r) => r.channel_id!);
+      const { data: existingRows, error: e1 } = await getSupabaseClient()
+        .from("contacts")
+        .select("id, channel_id, source_note")
+        .eq("workspace_id", wsId)
+        .in("channel_id", ids);
+      if (e1) throw e1;
+      const byChannel = new Map(
+        (existingRows ?? []).map((row: any) => [row.channel_id as string, row]),
+      );
+      for (const r of toAppend) {
+        const row = byChannel.get(r.channel_id!);
+        if (!row) continue;
+        const merged = [row.source_note, r.sourceNote]
+          .filter(Boolean)
+          .join("\n");
+        const { error: e2 } = await getSupabaseClient()
+          .from("contacts")
+          .update({ source_note: merged })
+          .eq("id", row.id)
+          .eq("workspace_id", wsId);
+        if (e2) throw e2;
+      }
+    }
+  }
+
   const counts: ImportCounts = {
     total: results.length,
     created: toCreate.length,
@@ -843,7 +984,7 @@ export function buildCandidatesCsv(
         ? `https://www.youtube.com/channel/${c.channel_id}`
         : "",
       displayName(c),
-      "", // source_note：本版无独立来源备注列
+      c.source_note ?? "",
       DECISION_LABELS[c.screening_decision],
       latest?.reason ?? "",
       latest?.evidence ?? "",

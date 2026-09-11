@@ -18,7 +18,7 @@ import {
   downloadCsv,
   exportScopeCandidates,
   importCandidates,
-  parseImportText,
+  parseImportContent,
   type Candidate,
   type ExportScope,
   type ImportCounts,
@@ -49,16 +49,18 @@ export function ImportDialog({
   const [text, setText] = useState("");
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportCounts | null>(null);
+  const [appendSourceNote, setAppendSourceNote] = useState(false);
 
   const existing = useMemo(
     () =>
       candidates.map((c) => c.channel_id).filter((v): v is string => v != null),
     [candidates],
   );
-  const rows = useMemo(
-    () => (text.trim() ? parseImportText(text, existing) : []),
+  const preview = useMemo(
+    () => parseImportContent(text, existing),
     [text, existing],
   );
+  const rows = preview.rows;
   const bytes = new Blob([text]).size;
   const overRows = rows.length > IMPORT_MAX_ROWS;
   const overBytes = bytes > IMPORT_MAX_BYTES;
@@ -76,7 +78,9 @@ export function ImportDialog({
   const doImport = async () => {
     setImporting(true);
     try {
-      const c = await importCandidates(workspace.id, rows);
+      const c = await importCandidates(workspace.id, rows, {
+        appendSourceNote,
+      });
       setResult(c);
       notify(
         `导入完成：新增 ${c.created}，已存在 ${c.existed}，无效 ${c.invalid}，重复 ${c.duplicate}`,
@@ -107,7 +111,8 @@ export function ImportDialog({
           <DialogTitle>导入候选</DialogTitle>
           <DialogDescription>
             每行一个频道 ID（UC…）、@handle 或频道链接；最多 {IMPORT_MAX_ROWS}{" "}
-            行、1MB。支持 CSV 的 channel_input 列。无效行不影响其他行。
+            行、1MB。支持本工具模板 CSV 和 Nox/Modash 等工具导出 CSV
+            （自动识别列名，结论作为来源备注保存）。无效行不影响其他行。
           </DialogDescription>
         </DialogHeader>
 
@@ -158,6 +163,7 @@ export function ImportDialog({
           onChange={(e) => {
             setText(e.target.value);
             setResult(null);
+            setAppendSourceNote(false);
           }}
         />
 
@@ -171,7 +177,28 @@ export function ImportDialog({
               {counts.invalid > 0 && (
                 <Badge variant="destructive">无效 {counts.invalid}</Badge>
               )}
+              {preview.mode === "tool" && (
+                <Badge className="bg-indigo-600">工具导出模式</Badge>
+              )}
+              {preview.mode === "template" && (
+                <Badge className="bg-indigo-600">标准模板</Badge>
+              )}
             </div>
+            {preview.unknownColumns.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                未识别列（本版不导入）：{preview.unknownColumns.join("、")}
+              </p>
+            )}
+            {preview.mode !== "lines" && counts.existed > 0 && (
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={appendSourceNote}
+                  onChange={(e) => setAppendSourceNote(e.target.checked)}
+                />
+                为已存在候选追加来源备注（不覆盖评估/任务/联系历史）
+              </label>
+            )}
             <div className="border rounded max-h-40 overflow-y-auto divide-y text-xs">
               {rows.map((r) => (
                 <div

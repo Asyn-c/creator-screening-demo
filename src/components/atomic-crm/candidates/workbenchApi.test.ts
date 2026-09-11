@@ -26,6 +26,7 @@ const baseCandidate = (overrides: Partial<Candidate> = {}): Candidate => ({
   do_not_contact_reason: null,
   workspace_id: 1,
   assessment_draft: null,
+  source_note: null,
   data_version: 0,
   api_cache: [],
   tasks: [],
