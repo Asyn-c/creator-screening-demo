@@ -18,4 +18,4 @@ A16,9ce3236,2026-09-10,both,含中文/逗号/引号/换行/公式字符字段,�
 A17,9ce3236,2026-09-10,both,示例重置后切回真实,E2E S10;T15,真实数据未受影响+示例全程标记,模式隔离通过(真实空间M0记录在/演示0串入);一键重置示例入口未实现(文案已修正为指引SQL),partial,evidence/M1/t14-11-real-isolated.png,M3-T33
 A18,9ce3236,2026-09-10,test,缓存过期且刷新失败,dataStatus检查expires_at,过期值不冒充新值+按规则清理+判断提示复核,过期状态显示「待更新」;自动清理动作未实现(仅标记),partial,workbenchApi.ts dataStatus,A18-cleanup
 A19,9ce3236,2026-09-10,demo,修改详情后关闭未保存侧栏,E2E S4守卫+S9失败保留,提示保存/放弃+服务错误保留输入,守卫三选(继续编辑/放弃/保存草稿并继续)通过;abort注入后输入保留通过,passed,evidence/M1/t14-04-unsaved-guard.png;t14-10,
-A20,9ce3236,,real,单条删除真实候选,,确认范围+级联删除+其他候选与示例空间不变,未实现(级联删除DB层已有on delete cascade;UI入口未做),not_run,,M3-T33
+A20,11eba45,2026-09-11,demo,删除有业务记录的候选(demo:08:6条联系事件),E2E verify-a20:对话框列出删除清单+勾选确认后执行,确认范围+级联删除+其他候选与示例空间不变,对话框列出评估/任务/事件/缓存计数+未勾选禁用;删除后候选消失/其他候选与真实空间不变(M0=3)/关联事件级联清除;跨空间id服务端拒绝,passed,evidence/acceptance/a20-01-confirm-dialog.png;a20-02-deleted.png,

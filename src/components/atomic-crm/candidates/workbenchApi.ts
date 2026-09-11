@@ -371,6 +371,28 @@ export async function setDoNotContact(input: {
   if (error) throw error;
 }
 
+export async function deleteCandidate(input: {
+  candidateId: number;
+  workspaceId: number;
+}): Promise<{
+  assessments: number;
+  contact_events: number;
+  tasks: number;
+  api_cache: number;
+}> {
+  const { data, error } = await getSupabaseClient().rpc("delete_candidate", {
+    p_candidate_id: input.candidateId,
+    p_workspace_id: input.workspaceId,
+  });
+  if (error) throw error;
+  return data as {
+    assessments: number;
+    contact_events: number;
+    tasks: number;
+    api_cache: number;
+  };
+}
+
 export async function unsetDoNotContact(input: {
   candidateId: number;
   workspaceId: number;

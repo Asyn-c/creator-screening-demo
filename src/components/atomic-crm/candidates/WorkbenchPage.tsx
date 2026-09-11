@@ -309,6 +309,11 @@ export const CandidateWorkbench = () => {
           workspace={workspace}
           onClose={() => guarded(() => setSelectedId(null))}
           onChanged={reload}
+          onDeleted={() => {
+            sidebarRef.current = null;
+            setSelectedId(null);
+            reload();
+          }}
         />
       )}
 

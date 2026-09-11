@@ -3,6 +3,7 @@ import type { Ref } from "react";
 import { useNotify } from "ra-core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -31,6 +32,8 @@ import {
   COMMENT_LIKE_THRESHOLD,
   contactReminders,
   dateInTz,
+  deleteCandidate,
+  displayName,
   engagementRates,
   fetchChannelData,
   isReviewStale,
@@ -135,12 +138,14 @@ export function CandidateDetailSidebar({
   workspace,
   onClose,
   onChanged,
+  onDeleted,
   ref,
 }: {
   candidate: Candidate;
   workspace: Workspace;
   onClose: () => void;
   onChanged: () => void;
+  onDeleted: () => void;
   ref?: Ref<SidebarHandle>;
 }) {
   const notify = useNotify();
@@ -163,6 +168,7 @@ export function CandidateDetailSidebar({
   const [fetching, setFetching] = useState(false);
   const [logOpen, setLogOpen] = useState<ContactEventType | null>(null);
   const [dncOpen, setDncOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const dirty = snapshot(form) !== baseline;
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
@@ -803,6 +809,24 @@ export function CandidateDetailSidebar({
             </div>
           )}
         </section>
+
+        {/* 危险区：单条删除（A20） */}
+        <section className="border-t pt-4 space-y-2">
+          <h3 className="font-semibold text-destructive">危险操作</h3>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">
+              删除该候选及其评估、任务、联系记录与资料缓存（不可恢复）
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive shrink-0"
+              onClick={() => setDeleteOpen(true)}
+            >
+              删除候选
+            </Button>
+          </div>
+        </section>
       </div>
 
       {/* 记录联系事件对话框（sent/replied 补录，未来时间被服务端拒绝） */}
@@ -814,6 +838,18 @@ export function CandidateDetailSidebar({
         onDone={() => {
           setLogOpen(null);
           onChanged();
+        }}
+      />
+
+      {/* 删除候选确认对话框（A20：明确列出将删除的内容并确认） */}
+      <DeleteCandidateDialog
+        candidate={candidate}
+        workspace={workspace}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => {
+          setDeleteOpen(false);
+          onDeleted();
         }}
       />
 
@@ -1168,6 +1204,90 @@ function DoNotContactDialog({
             variant={isSet ? "destructive" : "default"}
           >
             {saving ? "处理中…" : isSet ? "确认停止联系" : "确认解除"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 删除候选确认（A20）：列出将删除的全部内容，勾选确认后执行；跨空间拒绝由服务端兜底 */
+function DeleteCandidateDialog({
+  candidate,
+  workspace,
+  open,
+  onClose,
+  onDeleted,
+}: {
+  candidate: Candidate;
+  workspace: Workspace;
+  open: boolean;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const notify = useNotify();
+  const [ack, setAck] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  if (!open) return null;
+
+  const n = (v: number | undefined) => v ?? 0;
+  const rows = [
+    `评估版本 ${n(candidate.assessment?.length)} 条（含全部历史版本与草稿）`,
+    `下一步任务 ${n(candidate.tasks?.length)} 条（含已完成/已取消）`,
+    `联系事件 ${n(candidate.contact_events?.length)} 条（含已撤销）`,
+    `资料缓存 ${n(candidate.api_cache?.length)} 条`,
+  ];
+  const isDemo = candidate.channel_id?.startsWith("demo:");
+
+  const del = async () => {
+    setDeleting(true);
+    try {
+      const c = await deleteCandidate({
+        candidateId: candidate.id,
+        workspaceId: workspace.id,
+      });
+      notify(
+        `已删除候选及关联记录：评估 ${c.assessments}、任务 ${c.tasks}、联系事件 ${c.contact_events}、缓存 ${c.api_cache}`,
+        { type: "success" },
+      );
+      onDeleted();
+    } catch (e: any) {
+      notify(e.message ?? "删除失败", { type: "error" });
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>删除候选</DialogTitle>
+          <DialogDescription>
+            将永久删除「{displayName(candidate)}」（
+            {candidate.channel_id ?? "无频道标识"}
+            ）及其全部关联记录。此操作不可恢复；其他候选与
+            {isDemo ? "真实" : "示例"}空间不受影响。
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="text-sm space-y-1 border rounded p-3">
+          {rows.map((r) => (
+            <li key={r}>· {r}</li>
+          ))}
+        </ul>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={ack} onCheckedChange={(v) => setAck(v === true)} />
+          我已了解将删除以上全部内容，且无法恢复
+        </label>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={del}
+            disabled={!ack || deleting}
+          >
+            {deleting ? "删除中…" : "确认删除"}
           </Button>
         </DialogFooter>
       </DialogContent>
