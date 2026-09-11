@@ -29,6 +29,20 @@ describe("mapChannel (PRD F2: 未知与 0 分开)", () => {
     expect(m.raw.subscriber_count).toBeNull();
     expect(m.raw.country).toBeNull();
     expect(m.uploads_playlist_id).toBeNull();
+    expect(m.raw.view_count).toBeNull();
+    expect(m.raw.video_count).toBeNull();
+  });
+
+  it("maps channel total view_count and video_count (播放量评估数据源)", () => {
+    const m = mapChannel({
+      statistics: {
+        subscriberCount: "100",
+        viewCount: "987654",
+        videoCount: "321",
+      },
+    });
+    expect(m.raw.view_count).toBe(987654);
+    expect(m.raw.video_count).toBe(321);
   });
 });
 
@@ -46,6 +60,22 @@ describe("mapVideos", () => {
     expect(vs).toHaveLength(2);
     expect(vs[0]!.raw.view_count).toBe(0);
     expect(vs[1]!.raw.view_count).toBeNull();
+  });
+
+  it("keeps video_id and description (链接与竞品植入线索)", () => {
+    const vs = mapVideos([
+      {
+        id: "v9",
+        snippet: {
+          title: "测评",
+          description: "Thanks to Bosch for sponsoring this video",
+          publishedAt: "2026-01-01T00:00:00Z",
+        },
+        statistics: { viewCount: "100", likeCount: "5", commentCount: "1" },
+      },
+    ]);
+    expect(vs[0]!.raw.video_id).toBe("v9");
+    expect(vs[0]!.raw.description).toContain("Bosch");
   });
 });
 

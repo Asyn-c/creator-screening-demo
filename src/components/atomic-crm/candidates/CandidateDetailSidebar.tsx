@@ -28,11 +28,14 @@ import {
   channelStats,
   clearDraft,
   completeTask,
+  COMMENT_LIKE_THRESHOLD,
   contactReminders,
   dateInTz,
+  engagementRates,
   fetchChannelData,
   isReviewStale,
   latestAssessment,
+  LIKE_VIEW_THRESHOLD,
   openTask,
   recordContactEvent,
   remindersEnabled,
@@ -41,6 +44,7 @@ import {
   setDoNotContact,
   unsetDoNotContact,
   validSentEvents,
+  videoUrl,
   videos,
   voidContactEvent,
   type AssessmentDraft,
@@ -376,6 +380,20 @@ export function CandidateDetailSidebar({
                   : "未知"}
               </div>
               <div>
+                频道总播放量：{" "}
+                {ch.raw.view_count != null
+                  ? ch.raw.view_count.toLocaleString()
+                  : "未知"}
+                <span className="text-muted-foreground">
+                  {" "}
+                  · 公开视频{" "}
+                  {ch.raw.video_count != null
+                    ? ch.raw.video_count.toLocaleString()
+                    : "未知"}{" "}
+                  条（近 {vids.length} 条见下）
+                </span>
+              </div>
+              <div>
                 频道关联国家：{ch.raw.country ?? "未知"}
                 <span className="text-muted-foreground">
                   （受众国家可能不同）
@@ -393,20 +411,97 @@ export function CandidateDetailSidebar({
           <div className="space-y-1">
             <p className="text-sm font-medium">
               近期公开视频：{vids.length} 条
+              <span className="text-muted-foreground font-normal">
+                （互动率参考：赞/观看 ≥{LIKE_VIEW_THRESHOLD}%、评/赞 ≥
+                {COMMENT_LIKE_THRESHOLD}% 绿显）
+              </span>
             </p>
-            {vids.map((v) => (
-              <div
-                key={v.id}
-                className="text-sm border rounded p-2 flex justify-between gap-2"
-              >
-                <span className="min-w-0 truncate">{v.raw.title}</span>
-                <span className="text-muted-foreground shrink-0">
-                  {v.raw.published_at?.slice(0, 10)} · 观看{" "}
-                  {v.raw.view_count ?? "未知"} · 赞 {v.raw.like_count ?? "未知"}{" "}
-                  · 评论 {v.raw.comment_count ?? "未知"}
-                </span>
-              </div>
-            ))}
+            {vids.map((v) => {
+              const url = videoUrl(v.raw.video_id);
+              const { likeViewRate, commentLikeRate } = engagementRates(v.raw);
+              const desc = v.raw.description?.trim();
+              const sponsorHit =
+                desc && /sponsor|感谢.*赞助|品牌合作/i.test(desc);
+              return (
+                <div
+                  key={v.id}
+                  className="text-sm border rounded p-2 space-y-1"
+                >
+                  <div className="flex justify-between gap-2">
+                    {url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 truncate hover:underline font-medium"
+                        title={v.raw.title}
+                      >
+                        {v.raw.title}
+                      </a>
+                    ) : (
+                      <span className="min-w-0 truncate" title={v.raw.title}>
+                        {v.raw.title}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground shrink-0">
+                      {v.raw.published_at?.slice(0, 10)}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    观看 {v.raw.view_count?.toLocaleString() ?? "未知"} · 赞{" "}
+                    {v.raw.like_count?.toLocaleString() ?? "未知"} · 评论{" "}
+                    {v.raw.comment_count?.toLocaleString() ?? "未知"}
+                  </div>
+                  <div>
+                    {likeViewRate != null ? (
+                      <span
+                        className={
+                          likeViewRate >= LIKE_VIEW_THRESHOLD
+                            ? "text-green-600 font-medium"
+                            : ""
+                        }
+                      >
+                        赞/观看 {likeViewRate}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        赞/观看 未知
+                      </span>
+                    )}
+                    {" · "}
+                    {commentLikeRate != null ? (
+                      <span
+                        className={
+                          commentLikeRate >= COMMENT_LIKE_THRESHOLD
+                            ? "text-green-600 font-medium"
+                            : ""
+                        }
+                      >
+                        评/赞 {commentLikeRate}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">评/赞 未知</span>
+                    )}
+                  </div>
+                  {desc && (
+                    <div
+                      className="text-muted-foreground line-clamp-2"
+                      title={desc}
+                    >
+                      {sponsorHit && (
+                        <Badge
+                          variant="outline"
+                          className="mr-1 border-amber-500 text-amber-600"
+                        >
+                          疑似商业植入
+                        </Badge>
+                      )}
+                      {desc}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 

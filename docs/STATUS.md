@@ -32,6 +32,12 @@
 - **提效模拟测试**：`docs/BENCHMARK.md` + `docs/benchmark.csv` + `scripts/benchmark-tool.mjs`（可复跑）。10 位基准候选工具路径实测：119 操作 / 机器 27.3s / 必填 7/7 / 零返工；与增强表格任务分解对比：判断录入环节基本打平（工具 ≈97 操作 vs 表格 ≈54 单元格+汇总），节省集中在资料自动获取（每频道约省 1 分钟查抄+切换）与名单汇总；完整闭环估算下降 40—60%（假设透明，AI 模拟性质，不宣称达成 30% 目标）。真人对照材料已备：`demo-data/benchmark-spreadsheet-baseline.csv`（10 位等资料基线）
 - 基准测试数据已从真实空间清理（回到 3 条 M0 记录），证据保留于 `evidence/benchmark/`
 
+## 资料字段扩展（2026-09-11）
+
+- 新增：频道总播放量/公开视频数、视频链接（修复 PRD §4.2 缺口）、视频描述（竞品植入线索，自动打「疑似商业植入」徽章）、互动率自动计算（赞/观看≥5%、评/赞≥10% 绿显，阈值来自实习 SOP；决策变化见 DECISIONS D8）
+- 真实数据验证：MrBeast 频道（总播放 1396 亿/视频 1000/描述植入识别 Call of Duty、Homecare+、#oldnavypartner）；mapper 单测 7 项通过
+- 顺带修复：supabase/functions/.env 被上游白名单规则误跟踪（真实 Key 曾进入一个未推送的本地提交，已 amend+gc 清除，全历史无 Key；.gitignore 修正）
+
 ## 未完成 / 阻塞
 
 - ~~M2 真实接入需要 YouTube API Key（待用户配置）~~ → **2026-09-11 已配置真实 Key 并打通全链路**（真实频道拉取成功：MrBeast 频道订阅 5.16 亿/US/10 条视频/统计完整；容器代理方案见 DECISIONS D7）。A02 真实验收待用户导入 10 个自有频道执行

@@ -70,9 +70,14 @@ export interface ApiCacheRow {
     subscriber_count?: number | null;
     country?: string | null;
     published_at?: string;
+    /** 频道：累计总播放量；视频：该视频观看数 */
     view_count?: number | null;
     like_count?: number | null;
     comment_count?: number | null;
+    /** 仅频道：公开视频投稿总数 */
+    video_count?: number | null;
+    /** 仅视频：视频 ID（构造 watch 链接用；旧缓存/合成数据可能缺失） */
+    video_id?: string;
   };
   source: string;
   fetched_at: string;
@@ -451,6 +456,36 @@ export function displayName(c: Candidate): string {
   // 展示名回退到资料缓存标题：其生命周期跟随缓存刷新/过期，不写入永久字段
   const title = channelStats(c)?.raw.title;
   return title || c.channel_id || `候选 #${c.id}`;
+}
+
+// ---------- 互动率（展示参考值；阈值来自实习 SOP，2026-09-11 用户决策启用） ----------
+
+/** 点赞/观看 ≥5%（实习 SOP：互动质量阈值） */
+export const LIKE_VIEW_THRESHOLD = 5;
+/** 评论/点赞 ≥10%（实习 SOP） */
+export const COMMENT_LIKE_THRESHOLD = 10;
+
+export interface Engagement {
+  /** 点赞/观看（百分比，1 位小数）；无法计算时为 null（缺失或除数为 0 都不算 0） */
+  likeViewRate: number | null;
+  /** 评论/点赞（百分比） */
+  commentLikeRate: number | null;
+}
+
+export function engagementRates(v: {
+  view_count?: number | null;
+  like_count?: number | null;
+  comment_count?: number | null;
+}): Engagement {
+  const rate = (a: number | null | undefined, b: number | null | undefined) =>
+    a == null || b == null || b === 0 ? null : Math.round((a / b) * 1000) / 10;
+  const likeViewRate = rate(v.like_count, v.view_count);
+  const commentLikeRate = rate(v.comment_count, v.like_count);
+  return { likeViewRate, commentLikeRate };
+}
+
+export function videoUrl(videoId: string | undefined): string | null {
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
 }
 
 // ---------- 时区日期工具（PRD §7：due_date 按 Asia/Shanghai 自然日，不用 UTC 零点） ----------

@@ -1,7 +1,8 @@
 /**
  * YouTube API 响应 → api_cache 行的纯映射。
  * 规则（PRD F2）：只搬运原始字段；缺失显示未知（不补 0、不补造）；
- * null 与 0 分开保留；不计算派生指标。
+ * null 与 0 分开保留。互动率等派生值由前端展示层计算（2026-09-11 用户决策，
+ * 见 DECISIONS D8），缓存仍只存原始值。
  */
 
 export interface CacheRaw {
@@ -10,9 +11,14 @@ export interface CacheRaw {
   subscriber_count?: number | null;
   country?: string | null;
   published_at?: string;
+  /** 频道：累计总播放量；视频：该视频观看数（同一字段名，按 kind 区分语义） */
   view_count?: number | null;
   like_count?: number | null;
   comment_count?: number | null;
+  /** 仅频道：频道累计公开视频投稿数 */
+  video_count?: number | null;
+  /** 仅视频：视频 ID，用于构造 https://www.youtube.com/watch?v= 链接 */
+  video_id?: string;
 }
 
 export interface MappedChannel {
@@ -37,6 +43,8 @@ export interface YouTubeChannelItem {
   statistics?: {
     subscriberCount?: string;
     hiddenSubscriberCount?: boolean;
+    viewCount?: string;
+    videoCount?: string;
   };
   contentDetails?: {
     relatedPlaylists?: { uploads?: string };
@@ -45,7 +53,7 @@ export interface YouTubeChannelItem {
 
 export interface YouTubeVideoItem {
   id?: string;
-  snippet?: { title?: string; publishedAt?: string };
+  snippet?: { title?: string; description?: string; publishedAt?: string };
   statistics?: {
     viewCount?: string;
     likeCount?: string;
@@ -68,6 +76,15 @@ export function mapChannel(item: YouTubeChannelItem): MappedChannel {
             : null,
       country: item.snippet?.country ?? null,
       published_at: item.snippet?.publishedAt,
+      // 频道累计总播放量与公开投稿数（34 字段表中「播放量评估」的数据源）
+      view_count:
+        item.statistics?.viewCount != null
+          ? Number(item.statistics.viewCount)
+          : null,
+      video_count:
+        item.statistics?.videoCount != null
+          ? Number(item.statistics.videoCount)
+          : null,
     },
     uploads_playlist_id: item.contentDetails?.relatedPlaylists?.uploads ?? null,
   };
@@ -79,7 +96,10 @@ export function mapVideos(items: YouTubeVideoItem[]): MappedVideo[] {
     .map((v) => ({
       kind: "video" as const,
       raw: {
+        video_id: v.id,
         title: v.snippet?.title,
+        // 视频描述含商务植入线索（如 "Thanks to Bosch for sponsoring"），竞品史排查用
+        description: v.snippet?.description,
         published_at: v.snippet?.publishedAt,
         view_count:
           v.statistics?.viewCount != null
