@@ -53,36 +53,18 @@ const Header = () => {
               <div>
                 <nav className="flex">
                   <NavigationTab
-                    label={translate("ra.page.dashboard")}
-                    to="/"
-                    isActive={currentPath === "/"}
-                  />
-                  <NavigationTab
-                    label={translate("resources.contacts.name", {
-                      smart_count: 2,
-                    })}
-                    to="/contacts"
-                    isActive={currentPath === "/contacts"}
-                  />
-                  <NavigationTab
                     label="初筛工作台"
                     to="/candidates"
                     isActive={currentPath === "/candidates"}
                   />
                   <NavigationTab
-                    label={translate("resources.companies.name", {
-                      smart_count: 2,
-                    })}
-                    to="/companies"
-                    isActive={currentPath === "/companies"}
+                    label={translate("ra.page.dashboard")}
+                    to="/"
+                    isActive={currentPath === "/"}
                   />
-                  <NavigationTab
-                    label={translate("resources.deals.name", {
-                      smart_count: 2,
-                    })}
-                    to="/deals"
-                    isActive={currentPath === "/deals"}
-                  />
+                  {/* Contacts/Companies/Deals 从导航收起（PRD 范围控制：隐藏不相关入口，
+                      保留底层依赖）；路由未删——contacts 列表页仍是目前唯一可删除候选的
+                      UI（工作台 A20 单条删除落地后可整体移除页面） */}
                 </nav>
               </div>
               <div className="flex items-center">
