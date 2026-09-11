@@ -84,3 +84,12 @@
 - 已存在候选：来源备注**勾选确认后追加**（换行合并，PRD F1「需用户确认追加」= A05），评估/任务/联系历史一律不覆盖
 - 未识别列在预检中列示「本版不导入」；本工具标准模板 CSV（channel_input）同样支持，上传自己的模板不再失效（顺带修复）
 - 已知限制：列名变体表覆盖常见 Nox/Modash/HypeAuditor 格式，遇到新格式先看预检的「未识别列」提示；数值保留原样字符串（如"1.2万"），不做单位换算
+
+## 2026-09-11 · GitHub 同步（D10）
+
+- 仓库：https://github.com/Asyn-c/creator-screening-demo（公开，双语 README + 证据截图）
+- **网络环境**：直连 github.com 被阻断；本地代理（7890）可过小请求但**掐断 >2MB 的长上传**——15.5MB 的初始 pack 无论 HTTPS 还是 SSH 都推不上去
+- **推送方案**：把上游快照根提交重写为 10 个 ≤2MB 的分段提交（按目录/贪心分组），我们的 11 个开发提交 cherry-pick 原样重放，逐提交推送（每段只传增量）
+- **SSH 配置**（~/.ssh/config）：github.com → ssh.github.com:443 + ProxyCommand 走代理 + ControlMaster 持久连接（30m），后续推送复用 socket
+- 踩坑记录：① zsh 中 `$sha:refs/heads/main` 的 `:r` 被解释为变量修饰符，refspec 被吃——循环推送全部假失败，加引号 `"${sha}:refs"` 解决；② `git add <dir>` 会暂存工作区自有文件（曾把真实 Key 的 .env 带进快照索引，安全检查拦截）；③ 首推分支会成为 GitHub 默认分支（_probe 先于 main 推送，需 API 改默认分支后才能删）
+- 历史结构：init 空提交 + 10 个上游快照分段 + 11 个开发提交 + 1 个重放校正提交 = 23 个；树内容与重写前一致（仅剔除误提交的 vitest 临时截图）
