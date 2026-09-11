@@ -34,10 +34,10 @@
 
 ## 未完成 / 阻塞
 
-- 真实 Key 配置后的 A02–A07（10 真实频道、混合输入、部分失败恢复）——需用户在 `supabase/functions/.env` 设置真实 `YOUTUBE_API_KEY`（该文件已 gitignore）
-- M3 剩余：联系事件记录/撤销 UI（数据层与提醒已就绪）、停止联系设置入口（demo:09 有种子）
+- ~~M2 真实接入需要 YouTube API Key（待用户配置）~~ → **2026-09-11 已配置真实 Key 并打通全链路**（真实频道拉取成功：MrBeast 频道订阅 5.16 亿/US/10 条视频/统计完整；容器代理方案见 DECISIONS D7）。A02 真实验收待用户导入 10 个自有频道执行
+- M3 剩余：单条删除候选 UI、示例一键重置（acceptance A17/A20）
 - source_note 独立列未建（导出该列为空，PRD 允许留空）
-- 已知限制：导入的身份未经官方接口核实（未配 Key）；Edge Function 本地 serve 需独立进程（`npx supabase functions serve --env-file supabase/functions/.env`）
+- 已知限制：Edge Function 本地 serve 需独立进程（`npx supabase functions serve --env-file supabase/functions/.env`，含代理配置，见 D7）
 
 ## 决定
 

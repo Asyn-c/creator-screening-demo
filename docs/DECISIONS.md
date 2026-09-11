@@ -57,3 +57,12 @@
 - **Edge Function 本地运行**：`npx supabase functions serve --env-file supabase/functions/.env`（该文件已 gitignore，存 YOUTUBE_API_KEY 与 SB_JWT_ISSUER）。本地 serve 的坑：函数运行时 SUPABASE_URL 是容器内部地址，AuthMiddleware 校验 JWT iss 失败，需在 env 设 `SB_JWT_ISSUER=http://127.0.0.1:54321/auth/v1`；supabase-js 2.90 的 FunctionsHttpError 无 .json()，错误体在 `error.context`（Response）上读
 - **导出为前端生成**：个人本地应用无并发写风险，数量预览与文件同源于同一次内存查询，天然满足「预览=文件同条件」；服务端导出无必要性
 - **T15 完成定义**：数据指纹（contacts/assessment/导入/M0 四项计数）跨 `supabase stop`+`start` 一致 + 重启后两套 E2E 脚本全过。容器级重建未做（D3 风险约定：强杀会移除容器；stop/start 已覆盖同一 volume 持久化路径）
+
+## 2026-09-11 · 真实 Key 接入
+
+### D7: Edge Function 容器代理（googleapis 不可直连的网络环境）
+
+- 现象：Key 有效（宿主机走代理 curl 验证通过），但函数调用 30s 超时——Edge Function 跑在 Docker 容器内，直连 googleapis.com 被网络环境阻断
+- 方案：`supabase/functions/.env` 增加 `HTTPS_PROXY=http://host.docker.internal:7890`（宿主机代理端口）；Deno fetch（reqwest 内核）自动识别代理环境变量
+- **关键配套**：必须同时设 `NO_PROXY=kong,localhost,127.0.0.1,host.docker.internal`——否则函数内的数据库写入（SUPABASE_URL=http://kong:8000）也会被路由进代理而失败
+- 自查路径：宿主机直连失败(HTTP 000) → 宿主机走代理成功(证明 Key/网络可用) → 容器超时(定位容器无代理) → 注入代理环境变量后真实数据拉取成功（MrBeast 频道：订阅 5.16 亿/US/10 条视频/统计完整）
